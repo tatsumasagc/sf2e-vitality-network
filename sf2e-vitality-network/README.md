@@ -182,3 +182,30 @@ System flags are read from whichever namespace the running system uses (`flags.s
 `flags.pf2e.*`), turn starts are handled from both `pf2e.startTurn` and `sf2e.startTurn`, and the
 concealed condition is looked up in the running system's own compendium first. If a copy has lost its
 source id, the **Which feature grants the network** setting says which feature it should be read as.
+
+---
+
+## Installing from the manifest URL
+
+In Foundry, open **Add-on Modules** > **Install Module** and paste this into *Manifest URL*:
+
+```
+https://github.com/tatsumasagc/sf2e-vitality-network/releases/latest/download/module.json
+```
+
+Foundry then installs the release zip and can check for updates on its own. The same release page
+carries `module.json` and `sf2e-vitality-network-<version>.zip`, so a manual download works too.
+
+## Releasing a new version
+
+1. Bump `version` in `module.json`, update the `download` URL and add the notes to `CHANGELOG.md`.
+2. Commit and push, then publish the release:
+
+   ```
+   gh release create v1.4.0 --title "1.4.0" --notes-file CHANGELOG.md \
+       sf2e-vitality-network/module.json dist/sf2e-vitality-network-1.4.0.zip
+   ```
+
+`.github/workflows/release.yml` does the same automatically when a `v*` tag is pushed, provided
+GitHub Actions can run for the account; if it cannot (billing limits, for example), the command
+above publishes an identical release by hand.
