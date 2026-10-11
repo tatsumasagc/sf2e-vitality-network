@@ -1,0 +1,56 @@
+{
+    "name": "Elemental Harmony",
+    "type": "effect",
+    "img": "systems/pf2e/icons/default-icons/effect.svg",
+    "system": {
+        "description": {
+            "value": "<p>When you Transfer Vitality, choose an elemental trait: air, earth, fire, metal, water or wood. The target's next Strike deals damage based on the chosen trait (your choice) rather than its typical damage type.</p><p>Elemental trait: <strong>Fire</strong>. Strike damage becomes <strong>fire</strong> (or whichever of fire the target chooses).</p><p>This lasts until the end of the target's next turn.</p><p><strong>Source</strong> Starfinder Player Core</p>"
+        },
+        "level": {
+            "value": 1
+        },
+        "traits": {
+            "value": [
+                "magical"
+            ],
+            "otherTags": [
+                "fire"
+            ]
+        },
+        "duration": {
+            "value": 1,
+            "unit": "rounds",
+            "expiry": "turn-end",
+            "sustained": false
+        },
+        "tokenIcon": {
+            "show": true
+        },
+        "unidentified": false,
+        "fromSpell": false,
+        "badge": null,
+        "context": null,
+        "rules": [
+            {
+                "key": "RollOption",
+                "domain": "all",
+                "option": "harmony:elemental",
+                "toggleable": true
+            },
+            {
+                "key": "RollOption",
+                "domain": "all",
+                "option": "harmony:elemental:fire",
+                "toggleable": true
+            },
+            {
+                "key": "DamageDice",
+                "selector": "strike-damage",
+                "diceNumber": 0,
+                "override": {
+                    "damageType": "fire"
+                }
+            }
+        ]
+    }
+}

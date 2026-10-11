@@ -1,0 +1,13 @@
+# Built module zips (the release workflow builds these)
+dist/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Editor and OS noise
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+*.swp

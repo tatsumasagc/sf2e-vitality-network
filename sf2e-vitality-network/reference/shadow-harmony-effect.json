@@ -1,0 +1,62 @@
+{
+    "name": "Shadow Harmony",
+    "type": "effect",
+    "img": "systems/pf2e/icons/default-icons/effect.svg",
+    "system": {
+        "description": {
+            "value": "<p>When you Transfer Vitality, the target's shadow darkens and swells, reducing bright light within a 10-foot emanation of the target to dim light. This is a form of magical darkness and can overcome non-magical light sources or attempt to counteract magical light. The target becomes concealed while in this dim light and can use the concealed condition to Hide.</p><p>This lasts until the end of your next turn.</p><p><strong>Source</strong> Starfinder Player Core</p>"
+        },
+        "level": {
+            "value": 1
+        },
+        "traits": {
+            "value": [
+                "magical"
+            ],
+            "otherTags": []
+        },
+        "duration": {
+            "value": 1,
+            "unit": "rounds",
+            "expiry": "turn-end",
+            "sustained": false
+        },
+        "tokenIcon": {
+            "show": true
+        },
+        "unidentified": false,
+        "fromSpell": false,
+        "badge": null,
+        "context": null,
+        "rules": [
+            {
+                "key": "TokenLight",
+                "value": {
+                    "bright": 0,
+                    "dim": 10,
+                    "color": "#000000",
+                    "alpha": 0.5,
+                    "animation": {
+                        "type": "none"
+                    },
+                    "negative": true,
+                    "priority": 0
+                }
+            },
+            {
+                "key": "RollOption",
+                "domain": "all",
+                "option": "harmony:shadow",
+                "toggleable": true
+            },
+            {
+                "key": "GrantItem",
+                "uuid": "Compendium.pf2e.conditionitems.Item.DmAIPqOBomZ7H95W",
+                "onDeleteActions": {
+                    "grantee": "detach",
+                    "granter": "cascade"
+                }
+            }
+        ]
+    }
+}

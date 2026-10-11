@@ -1,0 +1,10 @@
+# Keep the module's text files on LF everywhere, so a checkout on Windows and a
+# release built on Linux produce identical files.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.zip binary
+*.ttf binary
+*.woff2 binary

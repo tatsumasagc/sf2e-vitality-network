@@ -1,0 +1,63 @@
+# Publishing a new version
+# ------------------------
+# 1. Bump "version" in sf2e-vitality-network/module.json and add the matching
+#    "download" and "manifest" URLs (they carry the version number).
+# 2. Add the release notes to CHANGELOG.md.
+# 3. Commit, then push a tag with the same version, prefixed with "v":
+#        git tag v1.4.0 && git push origin v1.4.0
+# The workflow checks the tag against module.json, runs the test suite and
+# publishes a GitHub release carrying module.json and the module zip, which is
+# exactly what Foundry's manifest URL expects:
+#        https://github.com/<owner>/<repo>/releases/latest/download/module.json
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Read the module version
+        id: module
+        run: |
+          VERSION=$(node -p "require('./sf2e-vitality-network/module.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Module version: $VERSION"
+
+      - name: Check the tag matches module.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$TAG" != "${{ steps.module.outputs.version }}" ]; then
+            echo "::error::Tag $TAG does not match module.json version ${{ steps.module.outputs.version }}"
+            exit 1
+          fi
+
+      - name: Run the test suite
+        run: node test/smoke-test.mjs
+
+      - name: Build the module zip
+        run: |
+          cd sf2e-vitality-network
+          zip -r "../sf2e-vitality-network-${{ steps.module.outputs.version }}.zip" . \
+            -x "test/*" "*.DS_Store" "__MACOSX/*"
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.module.outputs.version }}
+          files: |
+            sf2e-vitality-network/module.json
+            sf2e-vitality-network-${{ steps.module.outputs.version }}.zip
+          generate_release_notes: true
