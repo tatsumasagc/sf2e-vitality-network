@@ -68,3 +68,14 @@ Initial version.
 - Transfer Vitality: a dialog for the amount, the network reduced and the targeted token healed
   through PF2e's own damage pipeline.
 - Shadow Harmony: a 10-foot darkness emanation, concealment and the option to Hide.
+## 1.4.1
+
+- **The transfer summary no longer reopens the dialog.** Its "Transfer Vitality" heading was a link
+  to the action item; clicking an item link in chat posts that action again, and the system's card
+  for it reads as a fresh use, so the dialog appeared a second time. The heading is now plain text.
+- **Module cards are marked and never treated as uses.** Everything the module posts carries
+  `flags.sf2e-vitality-network.card`, and the chat handler ignores its own output outright.
+- **A chat card is handled once.** Message ids are recorded as they are handled, so a repeated hook
+  call cannot open two dialogs for the same card.
+
+## 1.4.0

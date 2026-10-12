@@ -939,6 +939,74 @@ await other.Hooks.fireOnce("init");
 await other.Hooks.fireOnce("ready");
 check("the module stays inert on an unrelated system", other.sandbox.game.sf2eVitalityNetwork === undefined);
 
+/* --- 15. The module's own card must not re-trigger the action ------------- */
+
+const { targetToken: reTargetToken } = makeTarget(state);
+game.user.targets = new Set([{ document: reTargetToken }]);
+state.dialogOverrides = { amount: 5 };
+
+const reCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
+const reAction = {
+    name: "Transfer Vitality",
+    slug: "transfer-vitality",
+    uuid: "Actor.caster.Item.action",
+    actor: reCaster,
+};
+const promptsBefore = state.prompts.length;
+
+// A genuine use opens the dialog…
+await Hooks.call("createChatMessage", {
+    id: "msg-use-1",
+    author: { id: "user-1" },
+    item: reAction,
+    actor: reCaster,
+    flags: {},
+});
+check(
+    "a use of the action opens the dialog",
+    state.prompts.length === promptsBefore + 1,
+    String(state.prompts.length - promptsBefore),
+);
+
+// …the same card is only ever handled once…
+await Hooks.call("createChatMessage", {
+    id: "msg-use-1",
+    author: { id: "user-1" },
+    item: reAction,
+    actor: reCaster,
+    flags: {},
+});
+check(
+    "the same card is only handled once",
+    state.prompts.length === promptsBefore + 1,
+    String(state.prompts.length - promptsBefore),
+);
+
+// …and the module's own summary card is ignored outright.
+const summaryCard = state.messages.at(-1);
+check(
+    "the summary card is marked as the module's own",
+    summaryCard?.flags?.["sf2e-vitality-network"]?.card === true,
+    JSON.stringify(summaryCard?.flags ?? {}),
+);
+check(
+    "the summary card links nothing that could be used again",
+    !/@UUID/.test(summaryCard?.content ?? ""),
+    String(summaryCard?.content ?? "").slice(0, 90),
+);
+await Hooks.call("createChatMessage", {
+    ...summaryCard,
+    id: "msg-summary-1",
+    author: { id: "user-1" },
+    item: reAction,
+    actor: reCaster,
+});
+check(
+    "the module's own card does not open the dialog",
+    state.prompts.length === promptsBefore + 1,
+    String(state.prompts.length - promptsBefore),
+);
+
 /* -------------------------------------------------------------------------- */
 /*  Summary                                                                    */
 /* -------------------------------------------------------------------------- */

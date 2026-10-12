@@ -66,7 +66,7 @@
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
     const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.4.0";
+    const VERSION = "1.4.1";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -1858,7 +1858,9 @@
             return await ChatMessage.create({
                 content: body,
                 speaker: getSpeaker ? getSpeaker.call(null, { actor, token: token?.object }) : undefined,
-                flags: { [SCRIPT_ID]: flags ?? {} },
+                // Every card this module posts carries its own flag, so the chat
+                // handler can recognise its own output and never react to it.
+                flags: { [SCRIPT_ID]: { card: true, ...(flags ?? {}) } },
             });
         } catch (err) {
             error("Could not post a chat card.", err);
@@ -1869,9 +1871,10 @@
     async function postTransferCard({ caster, casterToken, actionItem, targetActor, harmony, amount, result, relayed }) {
         if (!CONFIG.postChatSummary) return;
 
-        const actionLabel = actionItem?.uuid
-            ? `@UUID[${actionItem.uuid}]{Transfer Vitality}`
-            : "<strong>Transfer Vitality</strong>";
+        // Deliberately plain text rather than a link to the action: clicking an
+        // item link in chat posts the action again, and the system's own card for
+        // that reads as a fresh use of Transfer Vitality.
+        const actionLabel = "<strong>Transfer Vitality</strong>";
         const actual = result?.healed ?? null;
         const notes = result?.notes ?? [];
         const harmonyLine = harmony
@@ -2037,6 +2040,15 @@
     async function onChatMessage(message) {
         try {
             if (CONFIG.singleClientDialogs && message.author?.id !== game.user.id) return;
+
+            // Never react to a card this module posted itself, and never handle
+            // the same message twice.
+            if (message.flags?.[SCRIPT_ID]) return;
+            if (message.id) {
+                if (handledMessages.has(message.id)) return;
+                handledMessages.add(message.id);
+                if (handledMessages.size > 100) handledMessages.clear();
+            }
 
             const item = message.item ?? (await resolveOriginItem(message));
 
@@ -2388,3 +2400,7 @@
         );
     });
 })();
+    /** Message ids already handled, so one card can never open two dialogs. */
+    const handledMessages = new Set();
+
+    /** React to the Transfer Vitality action being used (its chat card). */
