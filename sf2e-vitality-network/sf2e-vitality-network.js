@@ -66,7 +66,7 @@
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
     const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.4.2";
+    const VERSION = "1.4.3";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -203,6 +203,9 @@
             classFeatureOnly: false,
             // Item names or slugs that count as the Refocus action.
             actionSlugs: ["refocus"],
+            // Refocus macros (xdy-pf2e-workbench, for example) post a card with no
+            // item attached, so the card's own text is the only clue.
+            detectCards: true,
             // Also refill whenever focus points are restored, which covers
             // resting and any Refocus the chat card does not identify.
             watchFocusIncrease: true,
@@ -633,7 +636,25 @@
     const error = (msg, err) => console.error(LOG_PREFIX, msg, err ?? "");
 
     /** Only one client should ever apply world-state changes for a given turn. */
-    const isPrimaryGM = () => game.user?.isGM && game.user === game.users?.activeGM;
+    /** Every GM who is currently connected. */
+    const activeGms = () =>
+        Array.from(game.users?.contents ?? []).filter((user) => user?.isGM && user.active !== false);
+
+    const anyGmOnline = () => activeGms().length > 0;
+
+    /**
+     * The one GM client that performs GM-only work. Normally that is the user
+     * Foundry designates as `activeGM`; when Foundry has not designated one, the
+     * lowest-id connected GM takes the job rather than nothing happening at all.
+     */
+    const isPrimaryGM = () => {
+        if (!game.user?.isGM) return false;
+        if (game.users?.activeGM) return game.user === game.users.activeGM;
+        const gms = activeGms()
+            .slice()
+            .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        return gms.length > 0 && gms[0] === game.user;
+    };
 
     const levelOf = (actor) => {
         const level = actor?.level ?? actor?.system?.details?.level?.value ?? 0;
@@ -854,6 +875,18 @@
         if (!item) return false;
         const haystack = `${item.slug ?? ""} ${item.name ?? ""}`.toLowerCase();
         return (CONFIG.refocus.actionSlugs ?? []).some((slug) => haystack.includes(String(slug).toLowerCase()));
+    }
+
+    /**
+     * Did this card come from a Refocus that carries no item? The workbench macro
+     * posts plain text, so the wording is the only evidence available.
+     */
+    function isRefocusCard(message) {
+        if (!CONFIG.refocus.detectCards) return false;
+        const raw = String(message?.content ?? "");
+        if (!raw) return false;
+        const text = raw.replace(/<[^>]*>/g, " ");
+        return /\brefocus(?:ing|ed)?\b/i.test(text);
     }
 
     /** The maximum transferable HP at a level, per the configured progression. */
@@ -1769,23 +1802,46 @@
 
     const pendingRequests = new Map();
 
-    function requestGmToApply(payload) {
-        if (!CONFIG.relayToGM || !game.users?.activeGM) return Promise.resolve(null);
+    /**
+     * Ask another client to apply the target's side of the transfer, because the
+     * acting player cannot write to an actor they do not own.
+     *
+     * `audience` is "gm" for a GM client, or "owner" for whoever owns the target
+     * (used when no GM is connected at all). Resolves with
+     * `{ ok, result, reason }` so the caller can explain a failure.
+     */
+    function requestRemoteApply(payload, { audience = "gm", timeoutMs = CONFIG.relayTimeoutMs } = {}) {
+        if (!CONFIG.relayToGM) {
+            return Promise.resolve({ ok: false, reason: "the GM relay is switched off in the module settings" });
+        }
+        if (audience === "gm" && !anyGmOnline()) {
+            return Promise.resolve({ ok: false, reason: "no GM is connected" });
+        }
+        if (!game.socket?.emit) {
+            return Promise.resolve({ ok: false, reason: "this client has no socket connection" });
+        }
 
         const requestId = foundry.utils.randomID();
         return new Promise((resolve) => {
             const timeout = setTimeout(() => {
                 pendingRequests.delete(requestId);
-                resolve(null);
-            }, CONFIG.relayTimeoutMs);
+                resolve({
+                    ok: false,
+                    reason:
+                        audience === "gm"
+                            ? "the GM's client did not answer in time"
+                            : "the target's owner did not answer in time",
+                });
+            }, timeoutMs);
 
-            pendingRequests.set(requestId, (result) => {
+            pendingRequests.set(requestId, (outcome) => {
                 clearTimeout(timeout);
-                resolve(result);
+                resolve(outcome);
             });
 
             game.socket.emit(SOCKET_CHANNEL, {
                 type: "apply-transfer",
+                audience,
                 requestId,
                 requesterId: game.user.id,
                 payload,
@@ -1801,10 +1857,20 @@
 
             // A GM's client performs work it has permission for on behalf of a player.
             if (message.type === "apply-transfer") {
-                if (!isPrimaryGM()) return;
-                let result = null;
+                const audience = message.audience === "owner" ? "owner" : "gm";
+                const payload = message.payload ?? {};
+
+                if (audience === "owner") {
+                    // Whoever owns the target may apply it — but only when there is
+                    // no GM route, so one transfer is never healed twice.
+                    const owned = await fromUuid(payload.targetActorUuid ?? "");
+                    if (game.user?.isGM || !owned?.isOwner) return;
+                } else if (!isPrimaryGM()) {
+                    return;
+                }
+
+                let outcome = { ok: false, reason: "the applying client could not finish" };
                 try {
-                    const payload = message.payload ?? {};
                     const targetActor = await fromUuid(payload.targetActorUuid ?? "");
                     const targetToken = payload.targetTokenUuid ? await fromUuid(payload.targetTokenUuid) : null;
                     const caster = await fromUuid(payload.casterActorUuid ?? "");
@@ -1827,13 +1893,19 @@
                                 relayed: true,
                             },
                         });
-                        result = {
-                            healed: applied.healed,
-                            effect: applied.effect,
-                            notes: applied.notes,
+                        outcome = {
+                            ok: true,
+                            result: {
+                                healed: applied.healed,
+                                effect: applied.effect,
+                                notes: applied.notes,
+                            },
                         };
+                    } else {
+                        outcome = { ok: false, reason: "the target actor could not be found" };
                     }
                 } catch (err) {
+                    outcome = { ok: false, reason: err?.message ? String(err.message) : String(err) };
                     error("Failed to apply a relayed transfer.", err);
                 }
 
@@ -1841,8 +1913,9 @@
                     type: "apply-transfer-result",
                     requestId: message.requestId,
                     requesterId: message.requesterId,
-                    ok: Boolean(result),
-                    result,
+                    ok: outcome.ok,
+                    result: outcome.result ?? null,
+                    reason: outcome.reason ?? null,
                 });
                 return;
             }
@@ -1852,7 +1925,11 @@
                 const resolve = pendingRequests.get(message.requestId);
                 if (resolve) {
                     pendingRequests.delete(message.requestId);
-                    resolve(message.ok ? message.result : null);
+                    resolve({
+                        ok: Boolean(message.ok),
+                        result: message.result ?? null,
+                        reason: message.reason ?? null,
+                    });
                 }
             }
         });
@@ -1891,7 +1968,17 @@
         }
     }
 
-    async function postTransferCard({ caster, casterToken, actionItem, targetActor, harmony, amount, result, relayed }) {
+    async function postTransferCard({
+        caster,
+        casterToken,
+        actionItem,
+        targetActor,
+        harmony,
+        amount,
+        result,
+        relayed,
+        failure = null,
+    }) {
         if (!CONFIG.postChatSummary) return;
 
         // Deliberately plain text rather than a link to the action: clicking an
@@ -1913,7 +2000,8 @@
             }.</p>
             ${harmonyLine}
             ${notes.length ? `<ul>${notes.map((note) => `<li>${note}</li>`).join("")}</ul>` : ""}
-            ${relayed ? `<p class="notes">Applied by the GM's client.</p>` : ""}`;
+            ${relayed ? `<p class="notes">Applied by the GM's client.</p>` : ""}
+            ${failure ? `<p class="notes">Not applied automatically: ${foundry.utils.escapeHTML(failure)}.</p>` : ""}`;
 
         await postChatCard({
             html,
@@ -2013,12 +2101,13 @@
         // 2. Apply the target side, locally or through the GM's client.
         let result = null;
         let relayed = false;
+        let failure = null;
         const canModify = game.user.isGM || targetActor.isOwner;
         try {
             if (canModify) {
                 result = await applyTargetSide({ harmony, context });
             } else {
-                result = await requestGmToApply({
+                const payload = {
                     harmony: harmony?.slug ?? null,
                     targetActorUuid: targetActor.uuid,
                     targetTokenUuid: target?.uuid ?? null,
@@ -2028,18 +2117,42 @@
                     element: context.element ?? null,
                     damageType: context.damageType ?? null,
                     amount: spend,
-                });
-                relayed = Boolean(result);
+                };
+
+                const gmOutcome = await requestRemoteApply(payload, { audience: "gm" });
+                let outcome = gmOutcome;
+                let reason = gmOutcome.reason ?? null;
+
+                if (!gmOutcome.ok && !anyGmOnline()) {
+                    // No GM client is connected at all, so ask whoever owns the
+                    // target instead of leaving the healing unapplied.
+                    const ownerOutcome = await requestRemoteApply(payload, {
+                        audience: "owner",
+                        timeoutMs: Math.max(2000, Math.round(CONFIG.relayTimeoutMs / 2)),
+                    });
+                    outcome = ownerOutcome;
+                    if (ownerOutcome.ok) reason = null;
+                    else if (reason && ownerOutcome.reason) reason = `${reason}; ${ownerOutcome.reason}`;
+                    else reason = ownerOutcome.reason ?? reason;
+                }
+
+                if (outcome.ok) {
+                    result = outcome.result;
+                    relayed = true;
+                } else {
+                    failure = reason;
+                }
             }
         } catch (err) {
             error("Applying the transfer to the target failed.", err);
             result = null;
+            failure = err?.message ? String(err.message) : String(err);
         }
 
         if (!result) {
             warn(
                 `Transferred ${spend} HP from the vitality network, but ${targetActor.name} could not be ` +
-                    `healed automatically (no GM online or no permission). Apply ${spend} HP of healing and ` +
+                    `healed automatically${failure ? ` (${failure})` : ""}. Apply ${spend} HP of healing and ` +
                     `the ${harmony?.name ?? "harmony effect"} manually.`,
             );
         }
@@ -2054,6 +2167,7 @@
             amount: spend,
             result,
             relayed,
+            failure,
         });
 
         return true;
@@ -2095,8 +2209,8 @@
             const item = message.item ?? (await resolveOriginItem(message));
 
             // Refocus refills the network completely (class feature only).
-            if (CONFIG.refocus.enabled && isRefocusAction(item)) {
-                const refocuser = item.actor ?? message.actor ?? null;
+            if (CONFIG.refocus.enabled && (isRefocusAction(item) || isRefocusCard(message))) {
+                const refocuser = item?.actor ?? message.actor ?? null;
                 if (refocuser) await refocusRecharge(refocuser, { reason: "Refocus" });
                 return;
             }

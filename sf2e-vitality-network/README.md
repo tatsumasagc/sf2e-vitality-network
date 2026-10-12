@@ -202,8 +202,8 @@ carries `module.json` and `sf2e-vitality-network-<version>.zip`, so a manual dow
 2. Commit and push, then publish the release:
 
    ```
-   gh release create v1.4.2 --title "1.4.2" --notes-file CHANGELOG.md \
-       sf2e-vitality-network/module.json dist/sf2e-vitality-network-1.4.2.zip
+   gh release create v1.4.3 --title "1.4.3" --notes-file CHANGELOG.md \
+       sf2e-vitality-network/module.json dist/sf2e-vitality-network-1.4.3.zip
    ```
 
 `.github/workflows/release.yml` does the same automatically when a `v*` tag is pushed, provided

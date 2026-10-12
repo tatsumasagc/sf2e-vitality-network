@@ -13,6 +13,15 @@ import vm from "node:vm";
 
 const SCRIPT_PATH = new URL("../sf2e-vitality-network/sf2e-vitality-network.js", import.meta.url);
 
+// Documents the world knows about, so `fromUuid` behaves like Foundry's — the
+// GM's client has to resolve the target and caster a player's relay names.
+const documents = new Map();
+const registerDoc = (doc) => {
+    if (doc?.uuid) documents.set(doc.uuid, doc);
+    return doc;
+};
+
+
 const CONNECTIONS = {
     akashic: { id: "fM1vlupLq9Zlyt7C", name: "Akashic" },
     elemental: { id: "AurhNoZmNNhHktx6", name: "Elemental" },
@@ -48,7 +57,7 @@ function fakeForm(content, overrides = {}) {
     return { elements };
 }
 
-function makeEnvironment({ systemId = "pf2e", systemVersion = "8.6.0" } = {}) {
+function makeEnvironment({ systemId = "pf2e", systemVersion = "8.6.0", isGM = true, userId = "user-1", socket = null } = {}) {
     const state = {
         created: [],
         damage: [],
@@ -80,12 +89,12 @@ function makeEnvironment({ systemId = "pf2e", systemVersion = "8.6.0" } = {}) {
         system: { id: systemId, version: systemVersion },
         version: "14.359",
         release: { version: "14.359" },
-        user: { id: "user-1", isGM: true, character: null, targets: new Set() },
-        users: { activeGM: null },
+        user: { id: userId, isGM, active: true, character: null, targets: new Set() },
+        users: { activeGM: null, contents: [] },
         actors: [],
         time: { worldTime: 1000 },
         combat: { id: "combat-1", started: true, round: 1, turn: 0, combatant: null },
-        socket: { on: () => {}, emit: () => {} },
+        socket: socket ?? { on: () => {}, emit: () => {} },
         pf2e: {},
         i18n: {
             localize: (key) => key,
@@ -107,7 +116,11 @@ function makeEnvironment({ systemId = "pf2e", systemVersion = "8.6.0" } = {}) {
     };
     // Foundry hands back the same User document, so the GM's own client is
     // identical to `game.users.activeGM`.
-    game.users.activeGM = game.user;
+    // Foundry hands back the same User document, so a GM's own client is
+    // identical to `game.users.activeGM`; a player's client instead sees the GM's
+    // user document, which tests wire up when they need it.
+    game.users.contents = [game.user];
+    game.users.activeGM = isGM ? game.user : null;
 
     const ui = {
         notifications: {
@@ -170,8 +183,8 @@ function makeEnvironment({ systemId = "pf2e", systemVersion = "8.6.0" } = {}) {
             },
         },
         Dialog: class {},
-        fromUuid: async () => null,
-        fromUuidSync: () => null,
+        fromUuid: async (uuid) => documents.get(uuid) ?? null,
+        fromUuidSync: (uuid) => documents.get(uuid) ?? null,
     };
 
     const context = vm.createContext(sandbox);
@@ -338,10 +351,11 @@ function makeCaster(
         deleted: [],
         getActiveTokens: () => [],
     };
+    registerDoc(caster);
     return caster;
 }
 
-function makeTarget(state, { conditions = [], afflictions = [] } = {}) {
+function makeTarget(state, { conditions = [], afflictions = [], isOwner = true } = {}) {
     const items = [
         ...conditions.map((slug) => ({
             type: "condition",
@@ -363,7 +377,7 @@ function makeTarget(state, { conditions = [], afflictions = [] } = {}) {
         name: "Ally",
         uuid: "Actor.ally",
         type: "character",
-        isOwner: true,
+        isOwner,
         items: { contents: items },
         system: { attributes: { hp: { value: 10, max: 40 } } },
         async applyDamage(params) {
@@ -378,6 +392,8 @@ function makeTarget(state, { conditions = [], afflictions = [] } = {}) {
         },
     };
     const targetToken = { actor: targetActor, uuid: "Scene.s1.Token.ally" };
+    registerDoc(targetActor);
+    registerDoc(targetToken);
     return { targetActor, targetToken };
 }
 
@@ -1045,6 +1061,141 @@ check(
     "overlapping triggers transfer only once",
     concurrentCaster.system.resources.vitalityNetwork.value === 15,
     String(concurrentCaster.system.resources.vitalityNetwork.value),
+);
+
+/* --- 17. A transfer to a character the player does not own ---------------- */
+
+// Two clients sharing one socket: a GM, and a player who owns neither the GM's
+// actors nor the target.
+const sharedClients = [];
+const loopbackSocket = {
+    on: (channel, handler) => sharedClients.push({ channel, handler }),
+    emit: (channel, message) => {
+        for (const client of sharedClients.slice()) {
+            if (client.channel === channel) void client.handler(message);
+        }
+    },
+};
+
+const gmEnv = makeEnvironment({ socket: loopbackSocket, userId: "gm-1", isGM: true });
+await gmEnv.Hooks.fireOnce("init");
+await gmEnv.Hooks.fireOnce("ready");
+
+const playerEnv = makeEnvironment({ socket: loopbackSocket, userId: "user-1", isGM: false });
+await playerEnv.Hooks.fireOnce("init");
+await playerEnv.Hooks.fireOnce("ready");
+
+// The player's client can see the GM, and the target belongs to someone else.
+playerEnv.game.users.contents = [gmEnv.game.user, playerEnv.game.user];
+playerEnv.game.users.activeGM = gmEnv.game.user;
+gmEnv.game.users.contents = [gmEnv.game.user, playerEnv.game.user];
+
+const relayTarget = makeTarget(playerEnv.state, { isOwner: false });
+playerEnv.game.user.targets = new Set([{ document: relayTarget.targetToken }]);
+playerEnv.state.dialogOverrides = { amount: 8 };
+
+const relayCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
+const relayAction = {
+    name: "Transfer Vitality",
+    slug: "transfer-vitality",
+    uuid: "Actor.caster.Item.action",
+    actor: relayCaster,
+};
+
+await playerEnv.Hooks.call("createChatMessage", {
+    id: "msg-relay-1",
+    author: { id: "user-1" },
+    item: relayAction,
+    actor: relayCaster,
+    flags: {},
+});
+
+check(
+    "the network is spent even when the target is not the player's",
+    relayCaster.system.resources.vitalityNetwork.value === 12,
+    String(relayCaster.system.resources.vitalityNetwork.value),
+);
+check(
+    "the GM's client healed the target",
+    playerEnv.state.damage.at(-1)?.damage === -8,
+    JSON.stringify(playerEnv.state.damage.at(-1) ?? null),
+);
+check(
+    "the summary says the GM applied it",
+    /Applied by the GM's client/.test(playerEnv.state.messages.at(-1)?.content ?? ""),
+    String(playerEnv.state.messages.at(-1)?.content ?? "").slice(0, 120),
+);
+check(
+    "the summary does not report a failure",
+    !/Not applied automatically/.test(playerEnv.state.messages.at(-1)?.content ?? ""),
+    String(playerEnv.state.messages.at(-1)?.content ?? "").slice(0, 120),
+);
+
+/* Nobody can apply it: no GM online, and no client owns the target. */
+
+const lonelyEnv = makeEnvironment({ socket: loopbackSocket, userId: "user-9", isGM: false });
+await lonelyEnv.Hooks.fireOnce("init");
+await lonelyEnv.Hooks.fireOnce("ready");
+lonelyEnv.game.users.contents = [lonelyEnv.game.user];
+lonelyEnv.game.users.activeGM = null;
+lonelyEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 30;
+
+const lonelyTarget = makeTarget(lonelyEnv.state, { isOwner: false });
+lonelyEnv.game.user.targets = new Set([{ document: lonelyTarget.targetToken }]);
+lonelyEnv.state.dialogOverrides = { amount: 4 };
+const lonelyCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
+
+await lonelyEnv.Hooks.call("createChatMessage", {
+    id: "msg-relay-2",
+    author: { id: "user-9" },
+    item: { ...relayAction, actor: lonelyCaster },
+    actor: lonelyCaster,
+    flags: {},
+});
+
+check(
+    "the summary explains why nothing could be applied",
+    /no GM is connected/.test(lonelyEnv.state.messages.at(-1)?.content ?? ""),
+    String(lonelyEnv.state.messages.at(-1)?.content ?? "").slice(0, 160),
+);
+
+
+
+/* --- 18. Refocus from a macro card --------------------------------------- */
+
+const macroEnv = makeEnvironment();
+await macroEnv.Hooks.fireOnce("init");
+await macroEnv.Hooks.fireOnce("ready");
+const macroCaster = makeCaster({ level: 10, value: 4, max: 20, connection: null });
+
+await macroEnv.Hooks.call("createChatMessage", {
+    id: "msg-refocus-macro",
+    author: { id: "user-1" },
+    actor: macroCaster,
+    content: "<p>Vex spends 10 minutes to <strong>Refocus</strong> and recover.</p>",
+    flags: {},
+});
+
+check(
+    "a Refocus macro card refills the network",
+    macroCaster.system.resources.vitalityNetwork.value === 20,
+    String(macroCaster.system.resources.vitalityNetwork.value),
+);
+
+// A card that does not mention Refocus must leave the network alone.
+const quietCaster = makeCaster({ level: 10, value: 5, max: 20, connection: null });
+await macroEnv.Hooks.call("createChatMessage", {
+    id: "msg-not-refocus",
+    author: { id: "user-1" },
+    actor: quietCaster,
+    content: "<p>Vex looks around the room.</p>",
+    flags: {},
+});
+
+check(
+    "an ordinary card does not refill the network",
+    quietCaster.system.resources.vitalityNetwork.value === 5,
+    String(quietCaster.system.resources.vitalityNetwork.value),
 );
 
 /* -------------------------------------------------------------------------- */

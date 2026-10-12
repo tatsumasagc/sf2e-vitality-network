@@ -96,3 +96,17 @@ Initial version.
   trigger.
 
 ## 1.4.1
+## 1.4.3
+
+- **Transferring to a character the player does not own now works.** A player cannot write to an
+  actor they do not own, so the module asks a GM's client to apply the healing and the harmony
+  effect. The relay no longer depends on Foundry having designated an `activeGM` — any connected GM
+  can take the job — and when no GM is connected at all, whoever owns the target is asked instead.
+- **A failed application now says why.** The chat summary and the notification name the reason (no GM
+  connected, nobody answered, the applying client reported an error) instead of a generic "no
+  permission".
+- **Refocus works from a macro card.** The xdy-pf2e-workbench Refocus macro posts a card with no item
+  attached, so the network was never refilled. Cards that mention Refocus are now recognised, and an
+  ordinary card still leaves the network alone.
+
+## 1.4.2
