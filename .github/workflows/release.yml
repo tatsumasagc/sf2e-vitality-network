@@ -64,8 +64,8 @@ jobs:
 #
 # If GitHub Actions is unavailable for the account (for example when billing
 # blocks job execution), publish the same release by hand:
-#        gh release create v1.4.1 \
-#            --title "1.4.1" --notes-file CHANGELOG.md \
+#        gh release create v1.4.2 \
+#            --title "1.4.2" --notes-file CHANGELOG.md \
 #            sf2e-vitality-network/module.json \
-#            dist/sf2e-vitality-network-1.4.1.zip
+#            dist/sf2e-vitality-network-1.4.2.zip
 # Foundry only needs the two assets, so the result is identical.

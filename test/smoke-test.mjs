@@ -470,7 +470,11 @@ check(
     String(caster.system.resources.vitalityNetwork.value),
 );
 check("target healed via applyDamage with negative damage", state.damage[0]?.damage === -15, String(state.damage[0]?.damage));
-check("healing passes the action item", state.damage[0]?.item === actionItem);
+check(
+    "healing is not attributed to the action (its card must not read as a use)",
+    state.damage[0]?.item == null,
+    String(state.damage[0]?.item),
+);
 
 const shadow = state.created.at(-1);
 check("Shadow Harmony effect created on the target", shadow?.name === "Shadow Harmony" && shadow.type === "effect");
@@ -1005,6 +1009,42 @@ check(
     "the module's own card does not open the dialog",
     state.prompts.length === promptsBefore + 1,
     String(state.prompts.length - promptsBefore),
+);
+
+/* --- 16. Overlapping triggers must not stack dialogs ---------------------- */
+
+const concurrentCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
+const concurrentAction = {
+    name: "Transfer Vitality",
+    slug: "transfer-vitality",
+    uuid: "Actor.caster.Item.action",
+    actor: concurrentCaster,
+};
+const promptsBeforeConcurrent = state.prompts.length;
+const firstTrigger = Hooks.call("createChatMessage", {
+    id: "msg-concurrent-1",
+    author: { id: "user-1" },
+    item: concurrentAction,
+    actor: concurrentCaster,
+    flags: {},
+});
+const secondTrigger = Hooks.call("createChatMessage", {
+    id: "msg-concurrent-2",
+    author: { id: "user-1" },
+    item: concurrentAction,
+    actor: concurrentCaster,
+    flags: {},
+});
+await Promise.all([firstTrigger, secondTrigger]);
+check(
+    "overlapping triggers open only one dialog",
+    state.prompts.length === promptsBeforeConcurrent + 1,
+    String(state.prompts.length - promptsBeforeConcurrent),
+);
+check(
+    "overlapping triggers transfer only once",
+    concurrentCaster.system.resources.vitalityNetwork.value === 15,
+    String(concurrentCaster.system.resources.vitalityNetwork.value),
 );
 
 /* -------------------------------------------------------------------------- */

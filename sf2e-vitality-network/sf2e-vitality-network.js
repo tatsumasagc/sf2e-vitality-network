@@ -66,7 +66,7 @@
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
     const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.4.1";
+    const VERSION = "1.4.2";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -1327,7 +1327,26 @@
      * `read` receives the dialog's form element and returns the value to resolve
      * with, or null to treat the prompt as cancelled.
      */
-    async function showPrompt({ title, content, okLabel, icon, read, legacyContent = content }) {
+    let promptOpen = false;
+
+    /**
+     * Only one dialog may ever be open. A second request while one is open is
+     * dropped, which is what stops a duplicate trigger from stacking dialogs.
+     */
+    async function showPrompt(options) {
+        if (promptOpen) {
+            log("ignored a request to open a dialog: one is already open");
+            return null;
+        }
+        promptOpen = true;
+        try {
+            return await showPromptInner(options);
+        } finally {
+            promptOpen = false;
+        }
+    }
+
+    async function showPromptInner({ title, content, okLabel, icon, read, legacyContent = content }) {
         const DialogV2 = foundry.applications?.api?.DialogV2;
         if (DialogV2?.prompt) {
             try {
@@ -1710,7 +1729,11 @@
     async function applyTargetSide({ harmony, context }) {
         const healed = await applyHealing(context.targetActor, context.amount, {
             token: context.targetToken,
-            item: context.actionItem,
+            // Deliberately no action item here. PF2e's own healing card would
+            // otherwise carry Transfer Vitality as its origin, and that card is
+            // indistinguishable from a fresh use of the action — which is what
+            // reopened the transfer dialog after a successful transfer.
+            item: null,
         });
 
         let effect = null;
@@ -2037,7 +2060,26 @@
     }
 
     /** React to the Transfer Vitality action being used (its chat card). */
+    /** Message ids already handled, so one card can never open two dialogs. */
+    const handledMessages = new Set();
+
+    /** True while a chat trigger is being handled, so they cannot overlap. */
+    let chatHandling = false;
+
     async function onChatMessage(message) {
+        if (chatHandling) {
+            log("ignored a chat trigger: one is already being handled");
+            return;
+        }
+        chatHandling = true;
+        try {
+            return await onChatMessageInner(message);
+        } finally {
+            chatHandling = false;
+        }
+    }
+
+    async function onChatMessageInner(message) {
         try {
             if (CONFIG.singleClientDialogs && message.author?.id !== game.user.id) return;
 
@@ -2356,8 +2398,22 @@
     }
 
     let systemSupported = false;
+    // True when a second copy of this script was loaded and stood down.
+    let inertCopy = false;
 
     Hooks.once("init", () => {
+        // Loading the script twice — a leftover world script beside the module, or
+        // the World Scripter module — would double every trigger and stack two
+        // dialogs. Whichever copy arrives second stands down.
+        if (game.sf2eVitalityNetwork) {
+            inertCopy = true;
+            console.warn(
+                `${LOG_PREFIX} another copy of this script is already loaded (game.sf2eVitalityNetwork exists). ` +
+                    "This copy stays inert — check for a leftover world script or the World Scripter module.",
+            );
+            return;
+        }
+
         systemSupported = SUPPORTED_SYSTEMS.has(game.system?.id ?? "");
         if (!systemSupported) {
             console.warn(
@@ -2373,6 +2429,8 @@
     });
 
     Hooks.once("ready", () => {
+        if (inertCopy) return;
+
         if (!SUPPORTED_SYSTEMS.has(game.system?.id ?? "")) {
             console.warn(`${LOG_PREFIX} this world is not running PF2e or SF2e — the script will not run.`);
             return;
@@ -2400,7 +2458,3 @@
         );
     });
 })();
-    /** Message ids already handled, so one card can never open two dialogs. */
-    const handledMessages = new Set();
-
-    /** React to the Transfer Vitality action being used (its chat card). */

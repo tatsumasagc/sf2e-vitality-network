@@ -79,3 +79,20 @@ Initial version.
   call cannot open two dialogs for the same card.
 
 ## 1.4.0
+## 1.4.2
+
+- **The transfer dialog no longer reopens after a successful transfer.** The healing call passed
+  Transfer Vitality as the item that caused it, so PF2e's own healing card carried the action as its
+  origin — and that card is indistinguishable from a fresh use of the action. Healing is no longer
+  attributed to the action, so the system's card no longer looks like a use. This is why the second
+  dialog only appeared when the network still had Hit Points to spend.
+- **Only one dialog can be open at a time.** If a second trigger arrives while a transfer dialog is
+  open, it is dropped instead of stacking another dialog on top of the first.
+- **Only one chat trigger is handled at a time.** Overlapping triggers (two cards for one use, or two
+  copies of the script reacting to the same card) can no longer run two transfers at once.
+- **A second copy of the script now stands down.** If the module and a leftover world script — or the
+  World Scripter module — are both loading this code, the second copy detects
+  `game.sf2eVitalityNetwork` and goes inert with a console warning, instead of doubling every
+  trigger.
+
+## 1.4.1
