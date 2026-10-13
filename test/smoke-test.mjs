@@ -1237,6 +1237,61 @@ check(
     JSON.stringify(relayReport.candidates),
 );
 
+/* --- 20. A listed GM whose client runs no module -------------------------- */
+
+const silentClients = [];
+const silentSocket = {
+    on: (channel, handler) => silentClients.push({ channel, handler }),
+    emit: (channel, message) => {
+        for (const client of silentClients.slice()) {
+            if (client.channel === channel) void client.handler(message);
+        }
+    },
+};
+
+// The target's owner runs the module; the GM who is listed as connected does not.
+const ownerEnv = makeEnvironment({ socket: silentSocket, userId: "user-1", isGM: false });
+await ownerEnv.Hooks.fireOnce("init");
+await ownerEnv.Hooks.fireOnce("ready");
+
+const ownerTarget = makeTarget(ownerEnv.state, { isOwner: true });
+const ghostGm = { id: "gm-ghost", name: "Ghost GM", isGM: true, active: true };
+
+const ignoredEnv = makeEnvironment({ socket: silentSocket, userId: "user-9", isGM: false });
+await ignoredEnv.Hooks.fireOnce("init");
+await ignoredEnv.Hooks.fireOnce("ready");
+ignoredEnv.game.users.contents = [ghostGm, ownerEnv.game.user, ignoredEnv.game.user];
+ignoredEnv.game.users.activeGM = ghostGm;
+ignoredEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 40;
+ignoredEnv.game.sf2eVitalityNetwork.config.relayPerCandidateMs = 40;
+ignoredEnv.game.user.targets = new Set([{ document: ownerTarget.targetToken }]);
+ignoredEnv.state.dialogOverrides = { amount: 6 };
+
+const ignoredCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
+await ignoredEnv.Hooks.call("createChatMessage", {
+    id: "msg-ghost-gm",
+    author: { id: "user-9" },
+    item: {
+        name: "Transfer Vitality",
+        slug: "transfer-vitality",
+        uuid: "Actor.caster.Item.action",
+        actor: ignoredCaster,
+    },
+    actor: ignoredCaster,
+    flags: {},
+});
+
+check(
+    "the network is spent when the listed GM's client runs no module",
+    ignoredCaster.system.resources.vitalityNetwork.value === 14,
+    String(ignoredCaster.system.resources.vitalityNetwork.value),
+);
+check(
+    "the target's owner applies the transfer instead",
+    ownerEnv.state.damage.at(-1)?.damage === -6,
+    JSON.stringify(ownerEnv.state.damage.at(-1) ?? null),
+);
+
 /* -------------------------------------------------------------------------- */
 /*  Summary                                                                    */
 /* -------------------------------------------------------------------------- */

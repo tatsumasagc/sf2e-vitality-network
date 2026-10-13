@@ -123,3 +123,13 @@ Initial version.
   are GMs — run it on the player's client when a transfer cannot be applied.
 
 ## 1.4.3
+## 1.4.5
+
+- **A listed GM that runs no module no longer blocks the transfer.** Foundry can report a GM as
+  connected while that client has the module switched off, so it can never answer. When every named GM
+  stays silent, the module now pings the table, and if no client answers as a GM it asks the target's
+  owner instead. Only that evidence unlocks the fallback, so a transfer can never be healed twice.
+- **The failure message says whether anyone is listening**: "…(no client answered a relay check)" means
+  no GM client is running the module at all.
+
+## 1.4.4

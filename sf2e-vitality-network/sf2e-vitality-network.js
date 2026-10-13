@@ -66,7 +66,7 @@
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
     const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.4.4";
+    const VERSION = "1.4.5";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -2219,11 +2219,23 @@
                 }
 
                 let reason = outcome.ok ? null : (outcome.reason ?? null);
+                let listeningGms = null;
+                let askOwner = !outcome.ok && !anyGmOnline();
+
                 if (!outcome.ok && !candidates.length) reason = "no GM is connected";
 
-                if (!outcome.ok && !anyGmOnline()) {
-                    // No GM client is connected at all, so ask whoever owns the
-                    // target instead of leaving the healing unapplied.
+                // A GM can be listed as connected while running no module at all, and
+                // such a client can never answer. A ping tells the two apart, and only
+                // when nobody answers is it safe to ask the target's owner without
+                // risking the same transfer being healed twice.
+                if (!outcome.ok && !askOwner && candidates.length > 0) {
+                    const ping = await testRelay({ timeoutMs: 1500 });
+                    listeningGms = ping.replies.filter((reply) => reply.isGM).length;
+                    askOwner = listeningGms === 0;
+                }
+
+                if (askOwner) {
+                    // Ask whoever owns the target rather than leaving it unapplied.
                     const ownerOutcome = await requestRemoteApply(payload, {
                         audience: "owner",
                         timeoutMs: Math.max(2000, Math.round(CONFIG.relayTimeoutMs / 2)),
@@ -2232,6 +2244,10 @@
                     if (ownerOutcome.ok) reason = null;
                     else if (reason && ownerOutcome.reason) reason = `${reason}; ${ownerOutcome.reason}`;
                     else reason = ownerOutcome.reason ?? reason;
+                }
+
+                if (!outcome.ok && listeningGms === 0) {
+                    reason = `${reason ?? "no GM client answered"} (no client answered a relay check)`;
                 }
 
                 if (outcome.ok) {
