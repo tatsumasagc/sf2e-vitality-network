@@ -169,3 +169,18 @@ Initial version.
   card with its healing link and effect button.
 
 ## 1.4.7
+## 1.5.1
+
+- **The card is the output.** A transfer to an actor the caster cannot modify no longer attempts a
+  relay: the card shows what happened and hands the rest to the table.
+- **The harmony is a draggable link.** The module keeps one world item per harmony — named the way PF2e
+  names effects, `Effect: Shadow Harmony` — and links it from the card, so it can be dragged onto the
+  target. An existing item of that name is reused, so a world does not accumulate copies. If the item
+  cannot be created (a player without permission to make world items), the card falls back to a button
+  that carries the effect data.
+- **The healing is a chip**: `@Damage[N[healing]]`, which opens PF2e's own card with its Apply Healing
+  button.
+- **The relay is now off by default** (`relay.config.relayToGM`). Turn it on to have a GM's client apply
+  transfers automatically; with it off nothing is attempted and no failure is reported.
+
+## 1.5.0

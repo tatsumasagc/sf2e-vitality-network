@@ -1093,6 +1093,7 @@ gmEnv.game.users.contents = [gmEnv.game.user, playerEnv.game.user];
 const relayTarget = makeTarget(playerEnv.state, { isOwner: false });
 playerEnv.game.user.targets = new Set([{ document: relayTarget.targetToken }]);
 playerEnv.state.dialogOverrides = { amount: 8 };
+playerEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
 
 const relayCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
 const relayAction = {
@@ -1139,6 +1140,7 @@ await lonelyEnv.Hooks.fireOnce("ready");
 lonelyEnv.game.users.contents = [lonelyEnv.game.user];
 lonelyEnv.game.users.activeGM = null;
 lonelyEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 30;
+lonelyEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
 
 const lonelyTarget = makeTarget(lonelyEnv.state, { isOwner: false });
 lonelyEnv.game.user.targets = new Set([{ document: lonelyTarget.targetToken }]);
@@ -1263,7 +1265,9 @@ await ignoredEnv.Hooks.fireOnce("ready");
 ignoredEnv.game.users.contents = [ghostGm, ownerEnv.game.user, ignoredEnv.game.user];
 ignoredEnv.game.users.activeGM = ghostGm;
 ignoredEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 40;
+ignoredEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
 ignoredEnv.game.sf2eVitalityNetwork.config.relayPerCandidateMs = 40;
+ignoredEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
 ignoredEnv.game.user.targets = new Set([{ document: ownerTarget.targetToken }]);
 ignoredEnv.state.dialogOverrides = { amount: 6 };
 
@@ -1320,7 +1324,9 @@ await ownerFirstEnv.Hooks.fireOnce("ready");
 ownerFirstEnv.game.users.contents = [deafGmUser, ownTargetEnv.game.user, ownerFirstEnv.game.user];
 ownerFirstEnv.game.users.activeGM = deafGmUser;
 ownerFirstEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 40;
+ownerFirstEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
 ownerFirstEnv.game.sf2eVitalityNetwork.config.relayPerCandidateMs = 40;
+ownerFirstEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
 ownerFirstEnv.game.user.targets = new Set([{ document: ownedTarget.targetToken }]);
 ownerFirstEnv.state.dialogOverrides = { amount: 8 };
 
@@ -1387,7 +1393,9 @@ await legacyEnv.Hooks.fireOnce("ready");
 legacyEnv.game.users.contents = [legacyGmEnv.game.user, legacyTargetEnv.game.user, legacyEnv.game.user];
 legacyEnv.game.users.activeGM = legacyGmEnv.game.user;
 legacyEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 40;
+legacyEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
 legacyEnv.game.sf2eVitalityNetwork.config.relayPerCandidateMs = 40;
+legacyEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
 legacyEnv.game.user.targets = new Set([{ document: legacyTarget.targetToken }]);
 legacyEnv.state.dialogOverrides = { amount: 5 };
 
@@ -1421,13 +1429,24 @@ check(
     String(legacyEnv.state.messages.at(-1)?.content ?? "").slice(0, 140),
 );
 
-/* --- 23. The card's manual fallback ---------------------------------------- */
+/* --- 23. The card is the output -------------------------------------------- */
 
-// With the relay switched off there is no automation at all, so the card has to
-// carry everything the table needs: a healing link and a button for the effect.
+// With the relay off there is no automation at all, so the card has to carry what
+// the table needs: a healing chip and a draggable link to the harmony effect.
+const templateItems = [];
+
 const manualEnv = makeEnvironment({ userId: "user-9", isGM: false });
+manualEnv.sandbox.Item = {
+    create: async (data) => {
+        const created = { ...data, id: "template-1", uuid: "Item.template-1" };
+        templateItems.push(created);
+        return created;
+    },
+};
+manualEnv.game.items = { find: (predicate) => templateItems.find(predicate) ?? undefined };
 await manualEnv.Hooks.fireOnce("init");
 await manualEnv.Hooks.fireOnce("ready");
+
 const manualTarget = makeTarget(manualEnv.state, { isOwner: false });
 const manualCaster = makeCaster({ level: 10, value: 20, max: 20, connection: "shadow" });
 manualEnv.game.user.targets = new Set([{ document: manualTarget.targetToken }]);
@@ -1451,24 +1470,72 @@ const manualCard = manualEnv.state.messages.at(-1);
 const manualHtml = String(manualCard?.content ?? "");
 
 check(
-    "the card offers a clickable healing link",
+    "the card offers a healing chip",
     /@Damage\[7\[healing\]\]/.test(manualHtml),
-    manualHtml.slice(0, 200),
+    manualHtml.slice(0, 220),
 );
 check(
-    "the healing is not written as a negative amount",
+    "the healing is never written as a negative amount",
     !/@Damage\[-7\]/.test(manualHtml),
-    manualHtml.slice(0, 200),
+    manualHtml.slice(0, 220),
 );
 check(
-    "the card offers the harmony button",
-    /class="sf2e-vn-apply-harmony"/.test(manualHtml),
-    manualHtml.slice(0, 200),
+    "the card links the harmony effect",
+    /@UUID\[Item\.template-1\]\{Effect: Shadow Harmony\}/.test(manualHtml),
+    manualHtml.slice(0, 220),
 );
 check(
-    "the card carries the effect data for the button",
-    Boolean(manualCard?.flags?.["sf2e-vitality-network"]?.pendingHarmony?.effect),
-    JSON.stringify(Object.keys(manualCard?.flags?.["sf2e-vitality-network"] ?? {})),
+    "the effect is named the way PF2e names effects",
+    templateItems[0]?.name === "Effect: Shadow Harmony",
+    String(templateItems[0]?.name ?? "none"),
+);
+check(
+    "the effect is reused rather than recreated",
+    templateItems.length === 1,
+    String(templateItems.length),
+);
+check(
+    "the card says nothing about a failed relay",
+    !/Not applied automatically/.test(manualHtml),
+    manualHtml.slice(0, 220),
+);
+
+// The same card has to cope with an item that cannot be created, which is what
+// happens for a player without permission to make world items.
+const fallbackEnv = makeEnvironment({ userId: "user-9", isGM: false });
+fallbackEnv.sandbox.Item = {
+    create: async () => {
+        throw new Error("no permission");
+    },
+};
+fallbackEnv.game.items = { find: () => undefined };
+await fallbackEnv.Hooks.fireOnce("init");
+await fallbackEnv.Hooks.fireOnce("ready");
+
+const fallbackTarget = makeTarget(fallbackEnv.state, { isOwner: false });
+const fallbackCaster = makeCaster({ level: 10, value: 20, max: 20, connection: "shadow" });
+fallbackEnv.game.user.targets = new Set([{ document: fallbackTarget.targetToken }]);
+fallbackEnv.game.sf2eVitalityNetwork.config.relayToGM = false;
+fallbackEnv.state.dialogOverrides = { amount: 4 };
+
+await fallbackEnv.Hooks.call("createChatMessage", {
+    id: "msg-manual-fallback",
+    author: { id: fallbackEnv.game.user.id },
+    item: {
+        name: "Transfer Vitality",
+        slug: "transfer-vitality",
+        uuid: "Actor.caster.Item.action",
+        actor: fallbackCaster,
+    },
+    actor: fallbackCaster,
+    flags: {},
+});
+
+const fallbackCard = fallbackEnv.state.messages.at(-1);
+check(
+    "without permission the card falls back to a button",
+    /class="sf2e-vn-apply-harmony"/.test(String(fallbackCard?.content ?? "")),
+    String(fallbackCard?.content ?? "").slice(0, 220),
 );
 
 /* -------------------------------------------------------------------------- */

@@ -66,7 +66,7 @@
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
     const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.5.0";
+    const VERSION = "1.5.1";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -274,7 +274,7 @@
         singleClientDialogs: true,
         // If the acting player cannot modify the target actor, ask the GM's
         // client (over a socket) to apply the healing and the harmony.
-        relayToGM: true,
+        relayToGM: false,
         relayTimeoutMs: 8000,
         // Each named GM is given this long to answer before the next is asked.
         relayPerCandidateMs: 8000,
@@ -1934,6 +1934,38 @@
         };
     }
     /**
+     * A world item standing for a harmony, so the card can offer the effect as a
+     * draggable link. An existing item is reused — one this module made, or one of
+     * the same name — so a world does not accumulate copies.
+     */
+    async function harmonyTemplateItem({ harmony, context }) {
+        const wanted = `Effect: ${harmony.name}`;
+        const existing = game.items?.find?.(
+            (item) =>
+                item?.flags?.[SCRIPT_ID]?.harmonyTemplate === harmony.slug ||
+                (item?.name === wanted && item?.type === "effect"),
+        );
+        if (existing) return existing;
+
+        const source = await createHarmonyEffect({ harmony, context, buildOnly: true });
+        if (!source) return null;
+
+        source.name = wanted;
+        source.flags = {
+            ...(source.flags ?? {}),
+            [SCRIPT_ID]: { ...(source.flags?.[SCRIPT_ID] ?? {}), harmonyTemplate: harmony.slug },
+        };
+
+        try {
+            const created = await Item.create(source);
+            return Array.isArray(created) ? (created[0] ?? null) : (created ?? null);
+        } catch (err) {
+            log("could not create the harmony item; the card will offer a button instead", err);
+            return null;
+        }
+    }
+
+    /**
      * Wire the harmony button on a transfer card. Whoever presses it — the target's
      * owner or a GM — is the client that has permission to write to the target, so
      * no relay is involved and nothing has to wait.
@@ -2132,9 +2164,9 @@
     }) {
         if (!CONFIG.postChatSummary) return;
 
-        // Deliberately plain text rather than a link to the action: clicking an
-        // item link in chat posts the action again, and the system's own card for
-        // that reads as a fresh use of Transfer Vitality.
+        // Deliberately plain text rather than a link to the action: clicking an item
+        // link in chat posts the action again, and the system's own card for that
+        // reads as a fresh use of Transfer Vitality.
         const actionLabel = "<strong>Transfer Vitality</strong>";
         const actual = result?.healed ?? null;
         const notes = result?.notes ?? [];
@@ -2144,6 +2176,34 @@
               }.</p>`
             : "";
 
+        // When nothing was applied, the card carries what the table needs rather than
+        // prose about it: the healing as a damage link (PF2e renders it as a chip and
+        // its own card has the Apply Healing button) and the harmony as a draggable
+        // link to an effect item, falling back to a button when that item is missing.
+        const healingPrompt = !result && amount > 0 ? `<p>@Damage[${amount}[healing]]</p>` : "";
+
+        let pendingHarmony = null;
+        let harmonyOffer = "";
+        if (!result && harmony && context) {
+            const item = await harmonyTemplateItem({ harmony, context });
+            if (item) {
+                harmonyOffer = `<p>@UUID[${item.uuid}]{${item.name}}</p>`;
+            } else {
+                try {
+                    const source = await createHarmonyEffect({ harmony, context, buildOnly: true });
+                    if (source) {
+                        pendingHarmony = { targetUuid: targetActor.uuid, effect: source };
+                        harmonyOffer =
+                            `<p class="notes"><button type="button" class="sf2e-vn-apply-harmony">Apply ` +
+                            `${foundry.utils.escapeHTML(source.name)} to ` +
+                            `${foundry.utils.escapeHTML(targetActor.name)}</button></p>`;
+                    }
+                } catch (err) {
+                    log("could not build the harmony effect for the card", err);
+                }
+            }
+        }
+
         const html = `
             <p>${actionLabel} — ${foundry.utils.escapeHTML(caster.name)} transfers
             <strong>${amount}</strong> HP to ${foundry.utils.escapeHTML(targetActor.name)}${
@@ -2152,50 +2212,16 @@
             ${harmonyLine}
             ${notes.length ? `<ul>${notes.map((note) => `<li>${note}</li>`).join("")}</ul>` : ""}
             ${relayed ? `<p class="notes">Applied by the GM's client.</p>` : ""}
-            ${failure ? `<p class="notes">Not applied automatically: ${foundry.utils.escapeHTML(failure)}.</p>` : ""}`;
-        // When the healing did not land, the card carries a clickable healing link
-        // rather than prose alone: the link opens a healing card whose Apply Healing
-        // button the target's owner or a GM can press. PF2e expresses healing as the
-        // `healing` flavour — a negative amount is clamped to 1, so it must not be
-        // used here.
-        const healingPrompt =
-            !result && amount > 0
-                ? `<p class="notes">Healing: @Damage[${amount}[healing]] — click the link, then ` +
-                  "<strong>Apply Healing</strong> on the card that opens.</p>"
-                : "";
-
-        // The same for the harmony: if the target's actor could not be written to,
-        // the effect is offered as a button that whoever has permission can press.
-        let pendingHarmony = null;
-        if (harmony && !result?.effect && context) {
-            try {
-                const source = await createHarmonyEffect({ harmony, context, buildOnly: true });
-                if (source) pendingHarmony = { targetUuid: targetActor.uuid, effect: source };
-            } catch (err) {
-                log("could not build the harmony effect for the card", err);
+            ${
+                failure && CONFIG.relayToGM
+                    ? `<p class="notes">Not applied automatically: ${foundry.utils.escapeHTML(failure)}.</p>`
+                    : ""
             }
-        }
-
-        const harmonyButton = pendingHarmony
-            ? `<p class="notes"><button type="button" class="sf2e-vn-apply-harmony">Apply ` +
-              `${foundry.utils.escapeHTML(pendingHarmony.effect.name)} to ` +
-              `${foundry.utils.escapeHTML(targetActor.name)}</button></p>`
-            : "";
-
-        const card = `
-            <p>${actionLabel} — ${foundry.utils.escapeHTML(caster.name)} transfers
-            <strong>${amount}</strong> HP to ${foundry.utils.escapeHTML(targetActor.name)}${
-                actual && actual !== amount ? ` (${actual} HP actually regained)` : ""
-            }.</p>
-            ${harmonyLine}
-            ${notes.length ? `<ul>${notes.map((note) => `<li>${note}</li>`).join("")}</ul>` : ""}
-            ${relayed ? `<p class="notes">Applied by the GM's client.</p>` : ""}
-            ${failure ? `<p class="notes">Not applied automatically: ${foundry.utils.escapeHTML(failure)}.</p>` : ""}
             ${healingPrompt}
-            ${harmonyButton}`;
+            ${harmonyOffer}`;
 
         await postChatCard({
-            html: card,
+            html,
             actor: caster,
             token: casterToken,
             flags: {
@@ -2204,7 +2230,6 @@
             },
         });
     }
-
     /* --------------------------- The whole flow --------------------------- */
 
     /**
