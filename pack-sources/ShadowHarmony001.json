@@ -1,0 +1,79 @@
+{
+  "_id": "ShadowHarmony001",
+  "name": "Effect: Shadow Harmony",
+  "type": "effect",
+  "img": "icons/magic/unholy/barrier-shield-glowing-pink.webp",
+  "system": {
+    "description": {
+      "value": "<p>Granted by @UUID[Compendium.sf2e-anachronism.actions.Item.UeMHbnnaXDa3sGfG]{Transfer Vitality}.</p><p>The target's shadow darkens and swells, reducing bright light within a 10-foot emanation of the target to dim light. This is a form of magical darkness and can overcome non-magical light sources or attempt to counteract magical light. The target becomes @UUID[Compendium.pf2e.conditionitems.Item.DmAIPqOBomZ7H95W]{Concealed} while in this dim light and can use the concealed condition to Hide. This lasts until the end of your next turn.</p>",
+      "gm": ""
+    },
+    "publication": {
+      "title": "SF2E Vitality Network",
+      "authors": "tatsumasagc",
+      "license": "OGL",
+      "remaster": false
+    },
+    "rules": [
+      {
+        "key": "TokenLight",
+        "value": {
+          "bright": 0,
+          "dim": 10,
+          "color": "#ffffff",
+          "negative": true,
+          "alpha": 0.2
+        }
+      },
+      {
+        "key": "RollOption",
+        "domain": "all",
+        "option": "harmony:shadow",
+        "toggleable": true
+      },
+      {
+        "key": "GrantItem",
+        "uuid": "Compendium.pf2e.conditionitems.Item.DmAIPqOBomZ7H95W",
+        "onDeleteActions": {
+          "grantee": "detach",
+          "granter": "cascade"
+        },
+        "flag": "concealed"
+      }
+    ],
+    "slug": "effect-shadow-harmony",
+    "traits": {
+      "otherTags": [],
+      "value": []
+    },
+    "level": {
+      "value": 1
+    },
+    "duration": {
+      "value": 1,
+      "unit": "rounds",
+      "expiry": "turn-end",
+      "sustained": false
+    },
+    "tokenIcon": {
+      "show": true
+    },
+    "unidentified": false,
+    "start": {
+      "value": 0,
+      "initiative": null
+    },
+    "badge": null,
+    "fromSpell": false,
+    "context": null
+  },
+  "effects": [],
+  "flags": {
+    "sf2e-vitality-network": {
+      "harmonyTemplate": "shadow"
+    }
+  },
+  "ownership": {
+    "default": 0
+  }
+}

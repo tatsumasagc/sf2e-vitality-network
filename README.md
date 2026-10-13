@@ -167,7 +167,7 @@ mid-session immediately gets the new limits.
 | `sf2e-vitality-network/reference/*.json` | Reference copies of the Shadow, Akashic and Elemental harmony effects. |
 | `sf2e-vitality-network/README.md` | The module's own README, for whoever installs it. |
 | `sf2e-vitality-network/LICENSE` | MIT licence (replace the placeholder holder before publishing). |
-| `dist/sf2e-vitality-network-1.5.1.zip` | The packaged module, for Foundry's *Install from File*. |
+| `dist/sf2e-vitality-network-1.6.0.zip` | The packaged module, for Foundry's *Install from File*. |
 | `CHANGELOG.md` | Version history, matching the version in `module.json`. |
 | `.github/workflows/release.yml` | Publishes a release carrying `module.json` and the module zip whenever a version tag is pushed. |
 | `.gitignore` | Keeps the built zips and editor noise out of the repository. |
@@ -185,7 +185,7 @@ onto a target by hand if you ever need to.
 
 1. Copy the `sf2e-vitality-network` folder into your Foundry user data directory under `Data/modules/`,
    so that `Data/modules/sf2e-vitality-network/module.json` exists. Alternatively use
-   `dist/sf2e-vitality-network-1.5.1.zip` with Foundry's *Install Module* > *Install from File* screen,
+   `dist/sf2e-vitality-network-1.6.0.zip` with Foundry's *Install Module* > *Install from File* screen,
    or point *Install Module* > *Manifest URL* at the release manifest (see the project's GitHub page).
 2. Enable **SF2E Vitality Network and Harmony** in your world's *Manage Modules* screen and save.
 3. Configure it under **Configure Settings > Module Settings**. The defaults follow the printed rules,
@@ -234,7 +234,7 @@ avoids editing `world.json` and is the quickest way to try the automation out.
 Open the browser console (F12) after logging in. You should see:
 
 ```
-SF2E Vitality Network | v1.5.1 loaded. Try game.sf2eVitalityNetwork.debug(game.user.character) to check setup.
+SF2E Vitality Network | v1.6.0 loaded. Try game.sf2eVitalityNetwork.debug(game.user.character) to check setup.
 ```
 
 If the console instead reports that the world is not running the PF2e system, the script has detected
@@ -343,7 +343,7 @@ effect data for each harmony, the dialogs and the guard clauses:
 node vitality-network/test/smoke-test.mjs
 ```
 
-It currently reports `148/148 checks passed`.
+It currently reports `152/152 checks passed`.
 
 ---
 

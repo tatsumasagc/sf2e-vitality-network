@@ -1,0 +1,60 @@
+{
+  "_id": "AkashicHarmony01",
+  "name": "Effect: Akashic Harmony",
+  "type": "effect",
+  "img": "icons/magic/unholy/barrier-shield-glowing-pink.webp",
+  "system": {
+    "description": {
+      "value": "<p>Granted by @UUID[Compendium.sf2e-anachronism.actions.Item.UeMHbnnaXDa3sGfG]{Transfer Vitality}.</p><p>The target receives a psychic download from the Akashic Record and can immediately attempt to Recall Knowledge as a reaction. This doesn't trigger any special abilities, reactions, or free actions that trigger when a creature uses Recall Knowledge. The target may use this reaction any time before the end of your next turn.</p>",
+      "gm": ""
+    },
+    "publication": {
+      "title": "SF2E Vitality Network",
+      "authors": "tatsumasagc",
+      "license": "OGL",
+      "remaster": false
+    },
+    "rules": [
+      {
+        "key": "RollOption",
+        "domain": "all",
+        "option": "harmony:akashic",
+        "toggleable": true
+      }
+    ],
+    "slug": "effect-akashic-harmony",
+    "traits": {
+      "otherTags": [],
+      "value": []
+    },
+    "level": {
+      "value": 1
+    },
+    "duration": {
+      "value": 1,
+      "unit": "rounds",
+      "expiry": "turn-end",
+      "sustained": false
+    },
+    "tokenIcon": {
+      "show": true
+    },
+    "unidentified": false,
+    "start": {
+      "value": 0,
+      "initiative": null
+    },
+    "badge": null,
+    "fromSpell": false,
+    "context": null
+  },
+  "effects": [],
+  "flags": {
+    "sf2e-vitality-network": {
+      "harmonyTemplate": "akashic"
+    }
+  },
+  "ownership": {
+    "default": 0
+  }
+}

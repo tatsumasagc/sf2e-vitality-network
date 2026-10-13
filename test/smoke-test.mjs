@@ -1480,7 +1480,7 @@ check(
     manualHtml.slice(0, 220),
 );
 check(
-    "the card links the harmony effect",
+    "without a pack the card links a world item",
     /@UUID\[Item\.template-1\]\{Effect: Shadow Harmony\}/.test(manualHtml),
     manualHtml.slice(0, 220),
 );
@@ -1498,6 +1498,51 @@ check(
     "the card says nothing about a failed relay",
     !/Not applied automatically/.test(manualHtml),
     manualHtml.slice(0, 220),
+);
+
+// The compendium shipped with the module is what makes the link resolve on every
+// client that has the module, so it is preferred over a world item.
+const packEnv = makeEnvironment({ userId: "user-9", isGM: false });
+packEnv.game.packs = {
+    get: (id) =>
+        id === "sf2e-vitality-network.harmonies"
+            ? {
+                  index: {
+                      get: (itemId) =>
+                          itemId === "ShadowHarmony001" ? { name: "Effect: Shadow Harmony" } : undefined,
+                  },
+              }
+            : undefined,
+};
+await packEnv.Hooks.fireOnce("init");
+await packEnv.Hooks.fireOnce("ready");
+
+const packTarget = makeTarget(packEnv.state, { isOwner: false });
+const packCaster = makeCaster({ level: 10, value: 20, max: 20, connection: "shadow" });
+packEnv.game.user.targets = new Set([{ document: packTarget.targetToken }]);
+packEnv.game.sf2eVitalityNetwork.config.relayToGM = false;
+packEnv.state.dialogOverrides = { amount: 6 };
+
+await packEnv.Hooks.call("createChatMessage", {
+    id: "msg-pack-link",
+    author: { id: packEnv.game.user.id },
+    item: {
+        name: "Transfer Vitality",
+        slug: "transfer-vitality",
+        uuid: "Actor.caster.Item.action",
+        actor: packCaster,
+    },
+    actor: packCaster,
+    flags: {},
+});
+
+const packHtml = String(packEnv.state.messages.at(-1)?.content ?? "");
+check(
+    "the card prefers the compendium link",
+    /@UUID\[Compendium\.sf2e-vitality-network\.harmonies\.Item\.ShadowHarmony001\]\{Effect: Shadow Harmony\}/.test(
+        packHtml,
+    ),
+    packHtml.slice(0, 260),
 );
 
 // The same card has to cope with an item that cannot be created, which is what
@@ -1536,6 +1581,24 @@ check(
     "without permission the card falls back to a button",
     /class="sf2e-vn-apply-harmony"/.test(String(fallbackCard?.content ?? "")),
     String(fallbackCard?.content ?? "").slice(0, 220),
+);
+
+// The pack itself has to be in the repository, in the manifest, and readable.
+const { existsSync: packExists, readFileSync: readPackFile } = await import("node:fs");
+check("the compendium pack is present", packExists("sf2e-vitality-network/packs/harmonies"), "packs/harmonies");
+const packManifest = JSON.parse(readPackFile("sf2e-vitality-network/module.json", "utf8"));
+check(
+    "the manifest declares the pack",
+    (packManifest.packs ?? []).some(
+        (entry) => entry.name === "harmonies" && entry.path === "packs/harmonies" && entry.type === "Item",
+    ),
+    JSON.stringify(packManifest.packs ?? null),
+);
+const packSources = ["AkashicHarmony01", "ElementalHarmony", "ShadowHarmony001", "HealingHarmony01", "RhythmHarmony001"];
+check(
+    "every harmony has a pack source",
+    packSources.every((id) => packExists(`pack-sources/${id}.json`)),
+    String(packSources.length),
 );
 
 /* -------------------------------------------------------------------------- */

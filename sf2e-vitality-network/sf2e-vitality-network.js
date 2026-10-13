@@ -66,7 +66,7 @@
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
     const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.5.1";
+    const VERSION = "1.6.0";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -1111,6 +1111,16 @@
     /*  4. HARMONIES (one per mystic connection)                               */
     /* ---------------------------------------------------------------------- */
 
+    /** The compendium that ships with the module, and its item ids. */
+    const HARMONY_PACK = "harmonies";
+    const HARMONY_PACK_IDS = {
+        akashic: "AkashicHarmony01",
+        elemental: "ElementalHarmony",
+        healing: "HealingHarmony01",
+        rhythm: "RhythmHarmony001",
+        shadow: "ShadowHarmony001",
+    };
+
     const ELEMENTAL_TRAITS = [
         { element: "air", types: ["electricity", "sonic"] },
         { element: "earth", types: ["bludgeoning", "piercing"] },
@@ -1940,6 +1950,17 @@
      */
     async function harmonyTemplateItem({ harmony, context }) {
         const wanted = `Effect: ${harmony.name}`;
+
+        // The compendium item comes first: its UUID resolves on any client with the
+        // module installed, which is what lets whoever has permission use the link.
+        const packId = HARMONY_PACK_IDS[harmony.slug];
+        const pack = game.packs?.get?.(`${SCRIPT_ID}.${HARMONY_PACK}`);
+        if (packId && pack) {
+            const uuid = `Compendium.${SCRIPT_ID}.${HARMONY_PACK}.Item.${packId}`;
+            const entry = pack.index?.get?.(packId);
+            return { uuid, name: entry?.name ?? wanted };
+        }
+
         const existing = game.items?.find?.(
             (item) =>
                 item?.flags?.[SCRIPT_ID]?.harmonyTemplate === harmony.slug ||

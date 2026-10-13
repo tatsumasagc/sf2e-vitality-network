@@ -1,0 +1,60 @@
+{
+  "_id": "HealingHarmony01",
+  "name": "Effect: Healing Harmony",
+  "type": "effect",
+  "img": "icons/magic/life/heart-glowing-red.webp",
+  "system": {
+    "description": {
+      "value": "<p>Granted by @UUID[Compendium.sf2e-anachronism.actions.Item.UeMHbnnaXDa3sGfG]{Transfer Vitality}.</p><p>Attempt to counteract one affliction affecting the target, or attempt to counteract one effect of your choice imposing one of the following conditions on the target: blinded, clumsy, dazzled, deafened, enfeebled, sickened. This item is a reminder only: the module reports the counteract on the transfer card and leaves the roll to you.</p>",
+      "gm": ""
+    },
+    "publication": {
+      "title": "SF2E Vitality Network",
+      "authors": "tatsumasagc",
+      "license": "OGL",
+      "remaster": false
+    },
+    "rules": [
+      {
+        "key": "RollOption",
+        "domain": "all",
+        "option": "harmony:healing",
+        "toggleable": true
+      }
+    ],
+    "slug": "effect-healing-harmony",
+    "traits": {
+      "otherTags": [],
+      "value": []
+    },
+    "level": {
+      "value": 1
+    },
+    "duration": {
+      "value": 1,
+      "unit": "rounds",
+      "expiry": "turn-end",
+      "sustained": false
+    },
+    "tokenIcon": {
+      "show": true
+    },
+    "unidentified": false,
+    "start": {
+      "value": 0,
+      "initiative": null
+    },
+    "badge": null,
+    "fromSpell": false,
+    "context": null
+  },
+  "effects": [],
+  "flags": {
+    "sf2e-vitality-network": {
+      "harmonyTemplate": "healing"
+    }
+  },
+  "ownership": {
+    "default": 0
+  }
+}

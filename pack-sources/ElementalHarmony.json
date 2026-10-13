@@ -1,0 +1,158 @@
+{
+  "_id": "ElementalHarmony",
+  "name": "Effect: Elemental Harmony",
+  "type": "effect",
+  "img": "icons/magic/unholy/barrier-shield-glowing-pink.webp",
+  "system": {
+    "description": {
+      "value": "<p>Granted by @UUID[Compendium.sf2e-anachronism.actions.Item.UeMHbnnaXDa3sGfG]{Transfer Vitality}.</p><p>Choose an elemental trait: air, earth, fire, metal, water or wood. The target's next Strike deals damage based on the chosen trait rather than its typical damage type. Pick the trait on the effect sheet when it is applied; until a trait is chosen the effect does nothing.</p>",
+      "gm": ""
+    },
+    "publication": {
+      "title": "SF2E Vitality Network",
+      "authors": "tatsumasagc",
+      "license": "OGL",
+      "remaster": false
+    },
+    "rules": [
+      {
+        "key": "ChoiceSet",
+        "flag": "elementalTrait",
+        "rollOption": "harmony:elemental",
+        "prompt": "Choose an elemental trait",
+        "choices": [
+          {
+            "value": "air",
+            "label": "Air"
+          },
+          {
+            "value": "earth",
+            "label": "Earth"
+          },
+          {
+            "value": "fire",
+            "label": "Fire"
+          },
+          {
+            "value": "metal",
+            "label": "Metal"
+          },
+          {
+            "value": "water",
+            "label": "Water"
+          },
+          {
+            "value": "wood",
+            "label": "Wood"
+          }
+        ]
+      },
+      {
+        "key": "RollOption",
+        "domain": "all",
+        "option": "harmony:elemental",
+        "toggleable": true
+      },
+      {
+        "key": "DamageDice",
+        "selector": "strike-damage",
+        "diceNumber": 0,
+        "override": {
+          "damageType": "electricity"
+        },
+        "predicates": [
+          "harmony:elemental:air"
+        ]
+      },
+      {
+        "key": "DamageDice",
+        "selector": "strike-damage",
+        "diceNumber": 0,
+        "override": {
+          "damageType": "bludgeoning"
+        },
+        "predicates": [
+          "harmony:elemental:earth"
+        ]
+      },
+      {
+        "key": "DamageDice",
+        "selector": "strike-damage",
+        "diceNumber": 0,
+        "override": {
+          "damageType": "fire"
+        },
+        "predicates": [
+          "harmony:elemental:fire"
+        ]
+      },
+      {
+        "key": "DamageDice",
+        "selector": "strike-damage",
+        "diceNumber": 0,
+        "override": {
+          "damageType": "acid"
+        },
+        "predicates": [
+          "harmony:elemental:metal"
+        ]
+      },
+      {
+        "key": "DamageDice",
+        "selector": "strike-damage",
+        "diceNumber": 0,
+        "override": {
+          "damageType": "bludgeoning"
+        },
+        "predicates": [
+          "harmony:elemental:water"
+        ]
+      },
+      {
+        "key": "DamageDice",
+        "selector": "strike-damage",
+        "diceNumber": 0,
+        "override": {
+          "damageType": "piercing"
+        },
+        "predicates": [
+          "harmony:elemental:wood"
+        ]
+      }
+    ],
+    "slug": "effect-elemental-harmony",
+    "traits": {
+      "otherTags": [],
+      "value": []
+    },
+    "level": {
+      "value": 1
+    },
+    "duration": {
+      "value": 1,
+      "unit": "rounds",
+      "expiry": "turn-end",
+      "sustained": false
+    },
+    "tokenIcon": {
+      "show": true
+    },
+    "unidentified": false,
+    "start": {
+      "value": 0,
+      "initiative": null
+    },
+    "badge": null,
+    "fromSpell": false,
+    "context": null
+  },
+  "effects": [],
+  "flags": {
+    "sf2e-vitality-network": {
+      "harmonyTemplate": "elemental"
+    }
+  },
+  "ownership": {
+    "default": 0
+  }
+}

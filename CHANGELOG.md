@@ -184,3 +184,17 @@ Initial version.
   transfers automatically; with it off nothing is attempted and no failure is reported.
 
 ## 1.5.0
+## 1.6.0
+
+- **The module now ships a compendium**, `Vitality Network Harmonies`, holding one effect item per
+  harmony: Akashic, Elemental, Shadow, and reminder items for Healing and Rhythm (which have no effect
+  of their own — they change the world directly).
+- **The card links the compendium item** where it can, so the link resolves on any client that has the
+  module installed rather than only in the world where the item happens to exist. A world item is used
+  if the pack is missing, and the button if neither is available.
+- **Elemental Harmony chooses its trait with a `ChoiceSet`** rule element, and each elemental trait
+  carries its damage-type override behind a predicate (`harmony:elemental:fire` and so on), so the
+  effect does nothing until a trait is picked and then applies only that trait's damage.
+- Item ids are fixed, so the link is stable across releases.
+
+## 1.5.1
