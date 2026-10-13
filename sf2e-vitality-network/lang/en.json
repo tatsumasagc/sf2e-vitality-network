@@ -82,10 +82,6 @@
                 "Hint": "Refill the vitality network when the character Refocuses, or when focus points are restored.",
                 "Name": "Refocus refills the network"
             },
-            "RelayToGM": {
-                "Hint": "Let the GM's client apply the healing, the effects and the harmonies when a player cannot edit the target's character.",
-                "Name": "Ask the GM's client to apply target-side changes"
-            },
             "SingleClientDialogs": {
                 "Hint": "Only the client that created the action's chat card shows the amount dialog.",
                 "Name": "One client shows the dialog"

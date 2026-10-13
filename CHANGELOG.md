@@ -198,3 +198,15 @@ Initial version.
 - Item ids are fixed, so the link is stable across releases.
 
 ## 1.5.1
+## 1.6.1
+
+- **The GM relay setting is gone.** `relayToGM` is no longer registered, so it cannot be switched on
+  from the settings form. A transfer the caster cannot apply simply outputs the card, as it has since
+  1.5.1. The relay code is still present and dormant — say the word and it can be deleted outright.
+- **Refocus applies to both the class feature and the archetype feat.** This was already the module's
+  behaviour (`refocusClassFeatureOnly` defaults to off); the workflow document said otherwise and has
+  been corrected.
+- The workflow document's transfer flow and card template were rewritten to match what the module
+  actually does.
+
+## 1.6.0

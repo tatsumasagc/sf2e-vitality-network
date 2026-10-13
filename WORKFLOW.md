@@ -1,6 +1,6 @@
 # SF2E Vitality Network — how the module works
 
-**Version described: 1.6.0** · Foundry v13/v14 · PF2e 8.6.x with sf2e-anachronism, or the SF2e system
+**Version described: 1.6.1** · Foundry v13/v14 · PF2e 8.6.x with sf2e-anachronism, or the SF2e system
 
 This is the full behaviour of the module as it stands, in the order things happen. Nothing here is
 aspirational: every step below is implemented and covered by the test suite (152 checks).
@@ -59,10 +59,6 @@ asks for the amount  (one dialog at a time; a second trigger is ignored while on
         ▼
 spends it from the network ── clamped to the transfer maximum and to what the network holds
         │
-        ├── the caster may modify the target ──► applies healing + harmony directly
-        │
-        └── the caster may not ──► (relay off by default) posts the card with its controls
-        │
         ▼
 posts the transfer card
 ```
@@ -108,11 +104,14 @@ at all.
 ## 5. The card
 
 ```
-**Transfer Vitality** — Ambrose transfers 10 HP to Angelus.
-**Shadow Harmony:** the target's shadow darkens and grants concealment.
-@UUID[Item.…]{Effect: Shadow Harmony}
-@Damage[10[healing]]
+**Transfer Vitality** — [SOURCE] transfers [##] HP to [RECIPIENT].
+**[Harmony]:** [what that harmony does to the target]
+@UUID[Compendium.sf2e-vitality-network.harmonies.Item.<id>]{Effect: [Harmony] Harmony}
+@Damage[##[healing]]
 ```
+
+The two enrichers are what the table interacts with: the effect link is dragged onto the
+target, and the healing link renders as a chip whose card carries the Apply Healing button.
 
 - The **healing chip** opens PF2e's own damage card, whose **Apply Healing** button does the work.
   Healing is written as the `healing` flavour — a negative amount would be clamped to 1 by PF2e.
@@ -133,9 +132,9 @@ at all.
 
 When a Refocus card appears in chat — the system's own action, or a macro such as the workbench's
 `Refocus` — the network refills to its maximum. The card is recognised from either its flavour or its
-content, since macros often put the word in the flavour. By default this applies only to characters
-whose network comes from the class feature (`refocus.classFeatureOnly`); set it false to include the
-archetype feat. The whole behaviour can be switched off (`refocus.enabled`).
+content, since macros often put the word in the flavour. This applies to **both** the class feature and
+the archetype feat, which is the default (`refocusClassFeatureOnly` is off). The whole behaviour can be
+switched off (`refocusEnabled`).
 
 ---
 
@@ -146,7 +145,7 @@ archetype feat. The whole behaviour can be switched off (`refocus.enabled`).
 | `capacityEnforce` | on | Rewrite the stored maximum to match the printed progression. |
 | `capacityCorrectOnStartup` | on | Correct every actor's stored maximum when the world loads. |
 | `refocusEnabled` | on | Refill the network when a Refocus card appears. |
-| `refocusClassFeatureOnly` | on | Restrict that refill to the class feature. |
+| `refocusClassFeatureOnly` | off | Restrict that refill to the class feature. |
 | `transferProgression` | printed | The transfer limit by level. |
 | `sourceOverride` | off | Force the network's source (class feature or archetype feat). |
 | `harmonyFallback` | off | A connection to assume when detection finds none. |
@@ -154,7 +153,6 @@ archetype feat. The whole behaviour can be switched off (`refocus.enabled`).
 | `elementalDamageTypeOverride` | on | Let Elemental Harmony change the Strike's damage type. |
 | `rechargeInCombatOnly` | on | Only recharge on turns in combat. |
 | `postChatSummary` | on | Post the transfer card at all. |
-| `relayToGM` | **off** | Ask a GM's client to apply a transfer the caster cannot. |
 | `singleClientDialogs` | on | Only one transfer dialog at a time. |
 | `verboseLogging` | off | Extra console detail. |
 | `advancedOverrides` | off | Allow a JSON settings blob to replace the built-in configuration. |

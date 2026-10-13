@@ -66,7 +66,7 @@
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
     const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.6.0";
+    const VERSION = "1.6.1";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -491,16 +491,6 @@
             name: "SF2E-VN.Settings.PostChatSummary.Name",
             apply: (value) => {
                 CONFIG.postChatSummary = value;
-            },
-        },
-        {
-            key: "relayToGM",
-            type: Boolean,
-            default: CONFIG.relayToGM,
-            name: "SF2E-VN.Settings.RelayToGM.Name",
-            hint: "SF2E-VN.Settings.RelayToGM.Hint",
-            apply: (value) => {
-                CONFIG.relayToGM = value;
             },
         },
         {
