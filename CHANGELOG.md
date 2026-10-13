@@ -3,8 +3,7 @@
 All notable changes to **SF2E Vitality Network and Harmony** are recorded here. The version number
 matches `sf2e-vitality-network/module.json`.
 
-
-.7.0
+## 1.7.0
 
 - **The GM relay is gone.** The socket channel, the request machinery, the candidate search, the
   diagnostics and the tests that covered them have been removed — roughly 620 lines of module and 200
