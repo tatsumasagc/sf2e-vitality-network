@@ -133,3 +133,16 @@ Initial version.
   no GM client is running the module at all.
 
 ## 1.4.4
+## 1.4.6
+
+- **The target's own player is asked first.** A player client needs no privileges to heal a character it
+  owns, so a transfer to another player's character no longer waits on a GM at all. The GMs are asked only
+  when nobody who owns the target is online. The two routes are alternatives, so a transfer is never
+  applied twice.
+- **Every attempt is logged.** When a transfer cannot be applied, the console reports each client that was
+  asked and what it answered, plus how many clients replied to a relay check — so a client that is listed
+  as connected but runs no module is obvious at a glance.
+- Each named GM client now gets 8 seconds rather than 4 before the next is asked
+  (`relay.config.relayPerCandidateMs`).
+
+## 1.4.5

@@ -1155,7 +1155,7 @@ await lonelyEnv.Hooks.call("createChatMessage", {
 
 check(
     "the summary explains why nothing could be applied",
-    /no GM is connected/.test(lonelyEnv.state.messages.at(-1)?.content ?? ""),
+            /no other client is connected/.test(lonelyEnv.state.messages.at(-1)?.content ?? ""),
     String(lonelyEnv.state.messages.at(-1)?.content ?? "").slice(0, 160),
 );
 
@@ -1290,6 +1290,68 @@ check(
     "the target's owner applies the transfer instead",
     ownerEnv.state.damage.at(-1)?.damage === -6,
     JSON.stringify(ownerEnv.state.damage.at(-1) ?? null),
+);
+
+/* --- 21. The target's own player applies it, with no GM --------------------- */
+
+const wiredClients = [];
+const wiredSocket = {
+    on: (channel, handler) => wiredClients.push({ channel, handler }),
+    emit: (channel, message) => {
+        for (const client of wiredClients.slice()) {
+            if (client.channel === channel) void client.handler(message);
+        }
+    },
+};
+
+// The target's owner is listening; the GM who is listed as connected is not.
+const ownTargetEnv = makeEnvironment({ socket: wiredSocket, userId: "user-1", isGM: false });
+await ownTargetEnv.Hooks.fireOnce("init");
+await ownTargetEnv.Hooks.fireOnce("ready");
+
+const ownedTarget = makeTarget(ownTargetEnv.state, { isOwner: true });
+ownedTarget.targetActor.ownership = { "user-1": 3, default: 0 };
+const deafGm = makeEnvironment({ userId: "gm-1", isGM: true });
+const deafGmUser = deafGm.game.user;
+
+const ownerFirstEnv = makeEnvironment({ socket: wiredSocket, userId: "user-9", isGM: false });
+await ownerFirstEnv.Hooks.fireOnce("init");
+await ownerFirstEnv.Hooks.fireOnce("ready");
+ownerFirstEnv.game.users.contents = [deafGmUser, ownTargetEnv.game.user, ownerFirstEnv.game.user];
+ownerFirstEnv.game.users.activeGM = deafGmUser;
+ownerFirstEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 40;
+ownerFirstEnv.game.sf2eVitalityNetwork.config.relayPerCandidateMs = 40;
+ownerFirstEnv.game.user.targets = new Set([{ document: ownedTarget.targetToken }]);
+ownerFirstEnv.state.dialogOverrides = { amount: 8 };
+
+const ownerFirstCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
+await ownerFirstEnv.Hooks.call("createChatMessage", {
+    id: "msg-owner-first",
+    author: { id: "user-9" },
+    item: {
+        name: "Transfer Vitality",
+        slug: "transfer-vitality",
+        uuid: "Actor.caster.Item.action",
+        actor: ownerFirstCaster,
+    },
+    actor: ownerFirstCaster,
+    flags: {},
+});
+
+check(
+    "the network is spent when the target's owner is asked",
+    ownerFirstCaster.system.resources.vitalityNetwork.value === 12,
+    String(ownerFirstCaster.system.resources.vitalityNetwork.value),
+);
+check(
+    "the target's own player applies the transfer",
+    ownTargetEnv.state.damage.at(-1)?.damage === -8,
+    JSON.stringify(ownTargetEnv.state.damage.at(-1) ?? null),
+);
+check(
+    "the deaf GM's client never applied anything",
+    deafGm.state.damage.length === 0,
+    String(deafGm.state.damage.length),
 );
 
 /* -------------------------------------------------------------------------- */

@@ -66,7 +66,7 @@
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
     const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.4.5";
+    const VERSION = "1.4.6";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -277,7 +277,7 @@
         relayToGM: true,
         relayTimeoutMs: 8000,
         // Each named GM is given this long to answer before the next is asked.
-        relayPerCandidateMs: 4000,
+        relayPerCandidateMs: 8000,
         postChatSummary: true,
         // Only run the recharge while a combat is active.
         rechargeInCombatOnly: true,
@@ -658,6 +658,30 @@
         }
         return gms;
     };
+
+    /**
+     * Player clients that own the target actor. Foundry stores ownership as a map
+     * of user id → permission level, where three or more means "owner".
+     */
+    const ownerCandidates = (ownership = {}) => {
+        const ids = new Set(
+            Object.entries(ownership ?? {})
+                .filter(([id, level]) => id !== "default" && Number(level) >= 3)
+                .map(([id]) => String(id)),
+        );
+        if (!ids.size || !game.users?.contents) return [];
+        return game.users.contents
+            .filter((user) => user && !user.isGM && user.active !== false && ids.has(String(user.id)))
+            .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    };
+
+    /** How an attempt ended, for the relay log. */
+    const describeAttempt = (outcome) =>
+        outcome.ok ? "applied it" : (outcome.reason ?? "did not answer in time");
+
+    /** A client that answered with a real error will not do better on a retry. */
+    const isRealFailure = (outcome) =>
+        Boolean(outcome.reason) && !/did not answer in time$/.test(String(outcome.reason));
 
     /** Replies collected by {@link testRelay}. */
     const relayPingReplies = [];
@@ -1921,6 +1945,9 @@
                     // no GM route, so one transfer is never healed twice.
                     const owned = await fromUuid(payload.targetActorUuid ?? "");
                     if (game.user?.isGM || !owned?.isOwner) return;
+                    // When the requester names an owner, only that player applies it,
+                    // so two owners of the same character cannot both heal it.
+                    if (message.targetUserId && game.user.id !== message.targetUserId) return;
                 } else if (message.targetUserId) {
                     // The requester named this client, so it acts even when Foundry
                     // does not agree that it is the primary GM.
@@ -2202,59 +2229,62 @@
                     amount: spend,
                 };
 
-                const candidates = gmCandidates();
+                // The target's own players need no GM: ask them first, then the GMs.
+                // The two routes are alternatives, never both at once, so a single
+                // transfer is never healed twice.
+                const owners = ownerCandidates(targetActor.ownership);
+                const gms = gmCandidates();
+                const attempts = [];
                 let outcome = { ok: false, reason: null };
 
-                for (const candidate of candidates) {
-                    log(`asking ${candidate.name} to apply the transfer`);
+                for (const owner of owners) {
+                    log(`asking ${owner.name}, who owns ${targetActor.name}, to apply the transfer`);
                     outcome = await requestRemoteApply(payload, {
-                        audience: "gm",
-                        targetUserId: candidate.id,
-                        timeoutMs: CONFIG.relayPerCandidateMs ?? 4000,
+                        audience: "owner",
+                        targetUserId: owner.id,
+                        timeoutMs: CONFIG.relayTimeoutMs,
                     });
+                    attempts.push(`${owner.name} (owner): ${describeAttempt(outcome)}`);
                     if (outcome.ok) break;
-                    // A client that answered with a real error will not do better on a
-                    // retry; a silent one is worth moving past to the next GM.
-                    if (outcome.reason && outcome.reason !== "the GM's client did not answer in time") break;
+                    if (isRealFailure(outcome)) break;
+                }
+
+                if (!outcome.ok && !isRealFailure(outcome)) {
+                    for (const gm of gms) {
+                        log(`asking ${gm.name} to apply the transfer`);
+                        outcome = await requestRemoteApply(payload, {
+                            audience: "gm",
+                            targetUserId: gm.id,
+                            timeoutMs: CONFIG.relayPerCandidateMs ?? 8000,
+                        });
+                        attempts.push(`${gm.name} (GM): ${describeAttempt(outcome)}`);
+                        if (outcome.ok) break;
+                        if (isRealFailure(outcome)) break;
+                    }
                 }
 
                 let reason = outcome.ok ? null : (outcome.reason ?? null);
-                let listeningGms = null;
-                let askOwner = !outcome.ok && !anyGmOnline();
 
-                if (!outcome.ok && !candidates.length) reason = "no GM is connected";
-
-                // A GM can be listed as connected while running no module at all, and
-                // such a client can never answer. A ping tells the two apart, and only
-                // when nobody answers is it safe to ask the target's owner without
-                // risking the same transfer being healed twice.
-                if (!outcome.ok && !askOwner && candidates.length > 0) {
-                    const ping = await testRelay({ timeoutMs: 1500 });
-                    listeningGms = ping.replies.filter((reply) => reply.isGM).length;
-                    askOwner = listeningGms === 0;
-                }
-
-                if (askOwner) {
-                    // Ask whoever owns the target rather than leaving it unapplied.
-                    const ownerOutcome = await requestRemoteApply(payload, {
-                        audience: "owner",
-                        timeoutMs: Math.max(2000, Math.round(CONFIG.relayTimeoutMs / 2)),
-                    });
-                    outcome = ownerOutcome;
-                    if (ownerOutcome.ok) reason = null;
-                    else if (reason && ownerOutcome.reason) reason = `${reason}; ${ownerOutcome.reason}`;
-                    else reason = ownerOutcome.reason ?? reason;
-                }
-
-                if (!outcome.ok && listeningGms === 0) {
-                    reason = `${reason ?? "no GM client answered"} (no client answered a relay check)`;
+                if (!outcome.ok) {
+                    // Silence from every client deserves an explanation: a client
+                    // listed as connected may be running no module at all.
+                    const listening = await testRelay({ timeoutMs: 1500 });
+                    const gmReplies = listening.replies.filter((reply) => reply.isGM).length;
+                    log(
+                        `relay finished without applying — ${attempts.join("; ") || "no client was asked"}; ` +
+                            `${listening.replies.length} client(s) answered a relay check (${gmReplies} GM)`,
+                    );
+                    if (!owners.length && !gms.length) reason = "no other client is connected";
+                    else if (!listening.replies.length) {
+                        reason = `${reason ?? "no client answered"} (no client answered a relay check)`;
+                    }
                 }
 
                 if (outcome.ok) {
                     result = outcome.result;
                     relayed = true;
                 } else {
-                    failure = reason ?? "no GM client answered";
+                    failure = reason ?? "no client answered";
                 }
             }
         } catch (err) {
