@@ -110,3 +110,16 @@ Initial version.
   ordinary card still leaves the network alone.
 
 ## 1.4.2
+## 1.4.4
+
+- **The workbench Refocus macro now refills the network.** It puts the word "Refocus" in the card's
+  *flavour* and leaves the content as the localised "regains N focus points" line, so the card was not
+  recognised. Both the content and the flavour are now read.
+- **The GM relay asks a named client.** A transfer used to be offered to whoever Foundry called the
+  primary GM, which could leave it unanswered (and, in a world with two GM sessions, unanswerable).
+  Each connected GM is now asked in turn, the designated one first, and a client that answers with a
+  real error is not retried. Per-candidate timeout: `relay.config.relayPerCandidateMs` (4 seconds).
+- **`game.sf2eVitalityNetwork.testRelay()`** reports which clients answer the relay and which of them
+  are GMs — run it on the player's client when a transfer cannot be applied.
+
+## 1.4.3

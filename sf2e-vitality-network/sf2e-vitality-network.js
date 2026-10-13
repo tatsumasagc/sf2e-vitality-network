@@ -66,7 +66,7 @@
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
     const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.4.3";
+    const VERSION = "1.4.4";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -276,6 +276,8 @@
         // client (over a socket) to apply the healing and the harmony.
         relayToGM: true,
         relayTimeoutMs: 8000,
+        // Each named GM is given this long to answer before the next is asked.
+        relayPerCandidateMs: 4000,
         postChatSummary: true,
         // Only run the recharge while a combat is active.
         rechargeInCombatOnly: true,
@@ -641,6 +643,24 @@
         Array.from(game.users?.contents ?? []).filter((user) => user?.isGM && user.active !== false);
 
     const anyGmOnline = () => activeGms().length > 0;
+    /**
+     * The GM clients a player should ask, in order. The client Foundry designates
+     * as `activeGM` goes first; the rest of the connected GMs follow, so a world
+     * with two GM sessions never depends on them agreeing about who is primary.
+     */
+    const gmCandidates = () => {
+        const gms = activeGms()
+            .slice()
+            .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        const designated = game.users?.activeGM;
+        if (designated && gms.includes(designated)) {
+            return [designated, ...gms.filter((user) => user !== designated)];
+        }
+        return gms;
+    };
+
+    /** Replies collected by {@link testRelay}. */
+    const relayPingReplies = [];
 
     /**
      * The one GM client that performs GM-only work. Normally that is the user
@@ -883,9 +903,13 @@
      */
     function isRefocusCard(message) {
         if (!CONFIG.refocus.detectCards) return false;
-        const raw = String(message?.content ?? "");
-        if (!raw) return false;
-        const text = raw.replace(/<[^>]*>/g, " ");
+        // The workbench macro puts "Refocus" in the card's *flavour* and leaves the
+        // content as the localised "regains N focus points" line, so both matter.
+        const text = [message?.content, message?.flavor, message?.flavour]
+            .filter((part) => typeof part === "string" && part.length > 0)
+            .join(" ")
+            .replace(/<[^>]*>/g, " ");
+        if (!text.trim()) return false;
         return /\brefocus(?:ing|ed)?\b/i.test(text);
     }
 
@@ -1810,7 +1834,10 @@
      * (used when no GM is connected at all). Resolves with
      * `{ ok, result, reason }` so the caller can explain a failure.
      */
-    function requestRemoteApply(payload, { audience = "gm", timeoutMs = CONFIG.relayTimeoutMs } = {}) {
+    function requestRemoteApply(
+        payload,
+        { audience = "gm", targetUserId = null, timeoutMs = CONFIG.relayTimeoutMs } = {},
+    ) {
         if (!CONFIG.relayToGM) {
             return Promise.resolve({ ok: false, reason: "the GM relay is switched off in the module settings" });
         }
@@ -1842,6 +1869,7 @@
             game.socket.emit(SOCKET_CHANNEL, {
                 type: "apply-transfer",
                 audience,
+                targetUserId,
                 requestId,
                 requesterId: game.user.id,
                 payload,
@@ -1849,6 +1877,34 @@
         });
     }
 
+    /**
+     * Check which clients answer the relay, and which of them are GMs. Useful when
+     * a player's transfer cannot be applied:
+     *   await game.sf2eVitalityNetwork.testRelay()
+     */
+    async function testRelay({ timeoutMs = 4000 } = {}) {
+        const candidates = gmCandidates();
+        const listed = candidates.map((user) => ({ id: user.id, name: user.name }));
+        relayPingReplies.length = 0;
+
+        if (!game.socket?.emit) {
+            return {
+                thisClient: { id: game.user.id, isGM: Boolean(game.user?.isGM) },
+                candidates: listed,
+                replies: [],
+                error: "this client has no socket connection",
+            };
+        }
+
+        game.socket.emit(SOCKET_CHANNEL, { type: "relay-ping", requesterId: game.user.id });
+        await new Promise((resolve) => setTimeout(resolve, timeoutMs));
+
+        return {
+            thisClient: { id: game.user.id, name: game.user.name, isGM: Boolean(game.user?.isGM) },
+            candidates: listed,
+            replies: relayPingReplies.slice(),
+        };
+    }
     function registerSocketHandler() {
         if (!game.socket?.on) return;
 
@@ -1865,6 +1921,10 @@
                     // no GM route, so one transfer is never healed twice.
                     const owned = await fromUuid(payload.targetActorUuid ?? "");
                     if (game.user?.isGM || !owned?.isOwner) return;
+                } else if (message.targetUserId) {
+                    // The requester named this client, so it acts even when Foundry
+                    // does not agree that it is the primary GM.
+                    if (!game.user?.isGM || game.user.id !== message.targetUserId) return;
                 } else if (!isPrimaryGM()) {
                     return;
                 }
@@ -1931,6 +1991,29 @@
                         reason: message.reason ?? null,
                     });
                 }
+                return;
+            }
+
+            // Relay diagnostics: answer a ping so a player can see which clients
+            // are listening and which of them are GMs.
+            if (message.type === "relay-ping") {
+                game.socket.emit(SOCKET_CHANNEL, {
+                    type: "relay-ping-reply",
+                    requesterId: message.requesterId,
+                    userId: game.user.id,
+                    userName: game.user.name,
+                    isGM: Boolean(game.user?.isGM),
+                });
+                return;
+            }
+
+            if (message.type === "relay-ping-reply") {
+                if (message.requesterId !== game.user.id) return;
+                relayPingReplies.push({
+                    id: message.userId ?? null,
+                    name: message.userName ?? null,
+                    isGM: Boolean(message.isGM),
+                });
             }
         });
     }
@@ -2119,11 +2202,26 @@
                     amount: spend,
                 };
 
-                const gmOutcome = await requestRemoteApply(payload, { audience: "gm" });
-                let outcome = gmOutcome;
-                let reason = gmOutcome.reason ?? null;
+                const candidates = gmCandidates();
+                let outcome = { ok: false, reason: null };
 
-                if (!gmOutcome.ok && !anyGmOnline()) {
+                for (const candidate of candidates) {
+                    log(`asking ${candidate.name} to apply the transfer`);
+                    outcome = await requestRemoteApply(payload, {
+                        audience: "gm",
+                        targetUserId: candidate.id,
+                        timeoutMs: CONFIG.relayPerCandidateMs ?? 4000,
+                    });
+                    if (outcome.ok) break;
+                    // A client that answered with a real error will not do better on a
+                    // retry; a silent one is worth moving past to the next GM.
+                    if (outcome.reason && outcome.reason !== "the GM's client did not answer in time") break;
+                }
+
+                let reason = outcome.ok ? null : (outcome.reason ?? null);
+                if (!outcome.ok && !candidates.length) reason = "no GM is connected";
+
+                if (!outcome.ok && !anyGmOnline()) {
                     // No GM client is connected at all, so ask whoever owns the
                     // target instead of leaving the healing unapplied.
                     const ownerOutcome = await requestRemoteApply(payload, {
@@ -2140,7 +2238,7 @@
                     result = outcome.result;
                     relayed = true;
                 } else {
-                    failure = reason;
+                    failure = reason ?? "no GM client answered";
                 }
             }
         } catch (err) {
@@ -2296,6 +2394,9 @@
 
             /** Open the diagnostics window. */
             diagnostics: () => showDiagnosticsDialog(),
+
+            /** Which clients answer the relay, and which of them are GMs. */
+            testRelay: (options) => testRelay(options),
 
             /** Transfer vitality without using the action's chat card. */
             transfer: (actor, { amount = null, targetToken = null } = {}) =>

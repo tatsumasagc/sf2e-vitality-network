@@ -1198,6 +1198,45 @@ check(
     String(quietCaster.system.resources.vitalityNetwork.value),
 );
 
+/* --- 19. The workbench Refocus card, and the relay diagnostic ------------- */
+
+// The workbench macro posts its wording in the *flavour* and leaves the content as
+// the localised "regains N focus points" line, so the flavour is the only clue.
+const workbenchEnv = makeEnvironment();
+await workbenchEnv.Hooks.fireOnce("init");
+await workbenchEnv.Hooks.fireOnce("ready");
+const workbenchCaster = makeCaster({ level: 10, value: 3, max: 20, connection: null });
+
+await workbenchEnv.Hooks.call("createChatMessage", {
+    id: "msg-workbench-refocus",
+    author: { id: "user-1" },
+    actor: workbenchCaster,
+    flavor:
+        '<strong><img src="systems/pf2e/icons/actions/Passive.webp" width="10" height="10" alt="Passive">Refocus</strong>',
+    content: "Regains 1 focus points.",
+    style: 3,
+    flags: {},
+});
+
+check(
+    "the workbench Refocus card (wording in the flavour) refills the network",
+    workbenchCaster.system.resources.vitalityNetwork.value === 20,
+    String(workbenchCaster.system.resources.vitalityNetwork.value),
+);
+
+// The relay diagnostic should report the GM client and the candidate list.
+const relayReport = await playerEnv.game.sf2eVitalityNetwork.testRelay({ timeoutMs: 20 });
+check(
+    "the relay diagnostic finds the GM's client",
+    relayReport.replies.some((reply) => reply.id === "gm-1"),
+    JSON.stringify(relayReport.replies),
+);
+check(
+    "the relay diagnostic lists the GM as a candidate",
+    relayReport.candidates.some((user) => user.id === "gm-1"),
+    JSON.stringify(relayReport.candidates),
+);
+
 /* -------------------------------------------------------------------------- */
 /*  Summary                                                                    */
 /* -------------------------------------------------------------------------- */

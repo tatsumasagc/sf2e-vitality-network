@@ -111,6 +111,7 @@ api.transfer(actor, { amount: 10 });    // transfer to the targeted token
 api.applyHarmony(targetActor, { harmony: "shadow", caster: actor });
 api.settings();                         // the settings in effect
 api.diagnostics();                      // open the diagnostics window
+api.testRelay();                        // which clients answer the GM relay
 api.applySettings();                    // re-apply settings after editing them in code
 api.harmonies;                          // the harmony registry itself
 ```
@@ -202,8 +203,8 @@ carries `module.json` and `sf2e-vitality-network-<version>.zip`, so a manual dow
 2. Commit and push, then publish the release:
 
    ```
-   gh release create v1.4.3 --title "1.4.3" --notes-file CHANGELOG.md \
-       sf2e-vitality-network/module.json dist/sf2e-vitality-network-1.4.3.zip
+   gh release create v1.4.4 --title "1.4.4" --notes-file CHANGELOG.md \
+       sf2e-vitality-network/module.json dist/sf2e-vitality-network-1.4.4.zip
    ```
 
 `.github/workflows/release.yml` does the same automatically when a `v*` tag is pushed, provided
