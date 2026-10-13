@@ -1,9 +1,9 @@
 # SF2E Vitality Network — how the module works
 
-**Version described: 1.6.1** · Foundry v13/v14 · PF2e 8.6.x with sf2e-anachronism, or the SF2e system
+**Version described: 1.7.0** · Foundry v13/v14 · PF2e 8.6.x with sf2e-anachronism, or the SF2e system
 
 This is the full behaviour of the module as it stands, in the order things happen. Nothing here is
-aspirational: every step below is implemented and covered by the test suite (152 checks).
+aspirational: every step below is implemented and covered by the test suite (137 checks).
 
 ---
 
@@ -12,12 +12,11 @@ aspirational: every step below is implemented and covered by the test suite (152
 | Trigger | Why |
 | --- | --- |
 | `init` | Refuses to load in a world that is not PF2e or SF2e, and stands down if a second copy of the script is loaded. |
-| `ready` | Applies the registered settings, registers the socket handler, wires the chat hooks, exposes the macro API, and corrects stored network maxima if asked to. |
+| `ready` | Applies the registered settings, wires the chat hooks, exposes the macro API, and corrects stored network maxima if asked to. |
 | `combatStart`, `combatTurnChange` | Recharges the network of whoever's turn begins, once per turn. |
 | `preUpdateActor`, `updateActor` | Keeps the network's value and maximum in order when they are edited by hand, and reacts to changes. |
 | `createChatMessage` | Recognises the **Transfer Vitality** action card and the **Refocus** card. |
 | `renderChatMessageHTML` / `renderChatMessage` | Wires the "Apply …" button on transfer cards. Both names are registered because Foundry has used each in recent versions. |
-| `game.socket`, channel `module.sf2e-vitality-network` | The optional GM relay (off by default). |
 
 Only one client acts on any given write: the primary GM, or the actor's owner.
 
@@ -123,8 +122,6 @@ target, and the healing link renders as a chip whose card carries the Apply Heal
 - If that item cannot be created — a player without permission to create world items — the card
   falls back to a **button** carrying the effect's data, which attaches it to the target for whoever
   presses it.
-- When the relay is on and a GM applies the transfer, the card says so instead.
-- A failure line appears **only** when a relay was actually attempted and failed.
 
 ---
 
@@ -157,8 +154,8 @@ switched off (`refocusEnabled`).
 | `verboseLogging` | off | Extra console detail. |
 | `advancedOverrides` | off | Allow a JSON settings blob to replace the built-in configuration. |
 
-The relay's timings (`relay.timeoutMs`, `relay.perCandidateMs`) and the harmony definitions live in
-the configuration rather than the settings form; `game.sf2eVitalityNetwork.config` exposes them.
+The harmony definitions live in the configuration rather than the settings form;
+`game.sf2eVitalityNetwork.config` exposes them.
 
 ---
 
@@ -175,7 +172,6 @@ Everything is reachable at `game.sf2eVitalityNetwork` (and `game.modules.get("sf
 | `.source(actor)` | `"classFeature"` or `"archetypeFeat"`. |
 | `.checkCapacity(actor, options)` | Compares the stored maximum with the rules, and corrects it if asked. |
 | `.correctCapacities()` | Corrects every actor in the world (primary GM only). |
-| `.testRelay()` | Pings the table and reports which clients answered as a GM. |
 | `.applySettings()` | Re-reads the registered settings into the running configuration. |
 | `.settings()` | Every setting this module registers, or the built-in defaults. |
 | `.config`, `.harmonies`, `.version` | The live configuration, the harmony definitions, and the version. |

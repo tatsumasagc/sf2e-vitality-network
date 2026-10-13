@@ -2,10 +2,10 @@
     "id": "sf2e-vitality-network",
     "title": "SF2E Vitality Network and Harmony",
     "description": "Automates the Starfinder 2e Mystic's Vitality Network on both PF2e (with the Starfinder Anachronism module) and the SF2e system: the turn-start recharge, the Refocus refill, the Transfer Vitality dialog with its printed transfer limits, and the Harmony that each of the five mystic connections applies to the target.",
-    "version": "1.6.1",
+    "version": "1.7.0",
     "url": "https://github.com/tatsumasagc/sf2e-vitality-network",
     "manifest": "https://github.com/tatsumasagc/sf2e-vitality-network/releases/latest/download/module.json",
-    "download": "https://github.com/tatsumasagc/sf2e-vitality-network/releases/download/v1.6.1/sf2e-vitality-network-1.6.1.zip",
+    "download": "https://github.com/tatsumasagc/sf2e-vitality-network/releases/download/v1.7.0/sf2e-vitality-network-1.7.0.zip",
     "compatibility": {
         "minimum": "13",
         "verified": "14"

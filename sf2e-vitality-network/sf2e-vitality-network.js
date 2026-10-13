@@ -65,8 +65,7 @@
 
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
-    const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.6.1";
+    const VERSION = "1.7.0";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -272,12 +271,6 @@
         // Only respond to the action's chat card on the client that created it
         // (prevents one dialog per connected player).
         singleClientDialogs: true,
-        // If the acting player cannot modify the target actor, ask the GM's
-        // client (over a socket) to apply the healing and the harmony.
-        relayToGM: false,
-        relayTimeoutMs: 8000,
-        // Each named GM is given this long to answer before the next is asked.
-        relayPerCandidateMs: 8000,
         postChatSummary: true,
         // Only run the recharge while a combat is active.
         rechargeInCombatOnly: true,
@@ -632,49 +625,7 @@
     const activeGms = () =>
         Array.from(game.users?.contents ?? []).filter((user) => user?.isGM && user.active !== false);
 
-    const anyGmOnline = () => activeGms().length > 0;
-    /**
-     * The GM clients a player should ask, in order. The client Foundry designates
-     * as `activeGM` goes first; the rest of the connected GMs follow, so a world
-     * with two GM sessions never depends on them agreeing about who is primary.
-     */
-    const gmCandidates = () => {
-        const gms = activeGms()
-            .slice()
-            .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-        const designated = game.users?.activeGM;
-        if (designated && gms.includes(designated)) {
-            return [designated, ...gms.filter((user) => user !== designated)];
-        }
-        return gms;
-    };
 
-    /**
-     * Player clients that own the target actor. Foundry stores ownership as a map
-     * of user id → permission level, where three or more means "owner".
-     */
-    const ownerCandidates = (ownership = {}) => {
-        const ids = new Set(
-            Object.entries(ownership ?? {})
-                .filter(([id, level]) => id !== "default" && Number(level) >= 3)
-                .map(([id]) => String(id)),
-        );
-        if (!ids.size || !game.users?.contents) return [];
-        return game.users.contents
-            .filter((user) => user && !user.isGM && user.active !== false && ids.has(String(user.id)))
-            .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-    };
-
-    /** How an attempt ended, for the relay log. */
-    const describeAttempt = (outcome) =>
-        outcome.ok ? "applied it" : (outcome.reason ?? "did not answer in time");
-
-    /** A client that answered with a real error will not do better on a retry. */
-    const isRealFailure = (outcome) =>
-        Boolean(outcome.reason) && !/did not answer in time$/.test(String(outcome.reason));
-
-    /** Replies collected by {@link testRelay}. */
-    const relayPingReplies = [];
 
     /**
      * The one GM client that performs GM-only work. Normally that is the user
@@ -1850,89 +1801,6 @@
         return { healed, effect: effect?.name ?? null, notes };
     }
 
-    /* ------------------------- GM relay over a socket ---------------------- */
-
-    const pendingRequests = new Map();
-
-    /**
-     * Ask another client to apply the target's side of the transfer, because the
-     * acting player cannot write to an actor they do not own.
-     *
-     * `audience` is "gm" for a GM client, or "owner" for whoever owns the target
-     * (used when no GM is connected at all). Resolves with
-     * `{ ok, result, reason }` so the caller can explain a failure.
-     */
-    function requestRemoteApply(
-        payload,
-        { audience = "gm", targetUserId = null, timeoutMs = CONFIG.relayTimeoutMs } = {},
-    ) {
-        if (!CONFIG.relayToGM) {
-            return Promise.resolve({ ok: false, reason: "the GM relay is switched off in the module settings" });
-        }
-        if (audience === "gm" && !anyGmOnline()) {
-            return Promise.resolve({ ok: false, reason: "no GM is connected" });
-        }
-        if (!game.socket?.emit) {
-            return Promise.resolve({ ok: false, reason: "this client has no socket connection" });
-        }
-
-        const requestId = foundry.utils.randomID();
-        return new Promise((resolve) => {
-            const timeout = setTimeout(() => {
-                pendingRequests.delete(requestId);
-                resolve({
-                    ok: false,
-                    reason:
-                        audience === "gm"
-                            ? "the GM's client did not answer in time"
-                            : "the target's owner did not answer in time",
-                });
-            }, timeoutMs);
-
-            pendingRequests.set(requestId, (outcome) => {
-                clearTimeout(timeout);
-                resolve(outcome);
-            });
-
-            game.socket.emit(SOCKET_CHANNEL, {
-                type: "apply-transfer",
-                audience,
-                targetUserId,
-                requestId,
-                requesterId: game.user.id,
-                payload,
-            });
-        });
-    }
-
-    /**
-     * Check which clients answer the relay, and which of them are GMs. Useful when
-     * a player's transfer cannot be applied:
-     *   await game.sf2eVitalityNetwork.testRelay()
-     */
-    async function testRelay({ timeoutMs = 4000 } = {}) {
-        const candidates = gmCandidates();
-        const listed = candidates.map((user) => ({ id: user.id, name: user.name }));
-        relayPingReplies.length = 0;
-
-        if (!game.socket?.emit) {
-            return {
-                thisClient: { id: game.user.id, isGM: Boolean(game.user?.isGM) },
-                candidates: listed,
-                replies: [],
-                error: "this client has no socket connection",
-            };
-        }
-
-        game.socket.emit(SOCKET_CHANNEL, { type: "relay-ping", requesterId: game.user.id });
-        await new Promise((resolve) => setTimeout(resolve, timeoutMs));
-
-        return {
-            thisClient: { id: game.user.id, name: game.user.name, isGM: Boolean(game.user?.isGM) },
-            candidates: listed,
-            replies: relayPingReplies.slice(),
-        };
-    }
     /**
      * A world item standing for a harmony, so the card can offer the effect as a
      * draggable link. An existing item is reused — one this module made, or one of
@@ -1979,7 +1847,7 @@
     /**
      * Wire the harmony button on a transfer card. Whoever presses it — the target's
      * owner or a GM — is the client that has permission to write to the target, so
-     * no relay is involved and nothing has to wait.
+     * the client is allowed to write to the target, so nothing has to wait.
      */
     function wireHarmonyButton(message, html) {
         const root = html instanceof HTMLElement ? html : html?.[0];
@@ -2012,122 +1880,6 @@
             });
         }
     }
-    function registerSocketHandler() {
-        if (!game.socket?.on) return;
-
-        game.socket.on(SOCKET_CHANNEL, async (message) => {
-            if (!message || typeof message !== "object") return;
-
-            // A GM's client performs work it has permission for on behalf of a player.
-            if (message.type === "apply-transfer") {
-                const audience = message.audience === "owner" ? "owner" : "gm";
-                const payload = message.payload ?? {};
-
-                if (audience === "owner") {
-                    // Whoever owns the target may apply it — but only when there is
-                    // no GM route, so one transfer is never healed twice.
-                    const owned = await fromUuid(payload.targetActorUuid ?? "");
-                    if (game.user?.isGM || !owned?.isOwner) return;
-                    // When the requester names an owner, only that player applies it,
-                    // so two owners of the same character cannot both heal it.
-                    if (message.targetUserId && game.user.id !== message.targetUserId) return;
-                } else if (message.targetUserId) {
-                    // The requester named this client, so it acts even when Foundry
-                    // does not agree that it is the primary GM.
-                    if (!game.user?.isGM || game.user.id !== message.targetUserId) return;
-                } else if (!isPrimaryGM()) {
-                    return;
-                }
-
-                let outcome = { ok: false, reason: "the applying client could not finish" };
-                try {
-                    const targetActor = await fromUuid(payload.targetActorUuid ?? "");
-                    const targetToken = payload.targetTokenUuid ? await fromUuid(payload.targetTokenUuid) : null;
-                    const caster = await fromUuid(payload.casterActorUuid ?? "");
-                    const casterToken = payload.casterTokenUuid ? await fromUuid(payload.casterTokenUuid) : null;
-                    const actionItem = payload.actionItemUuid ? await fromUuid(payload.actionItemUuid) : null;
-
-                    if (targetActor) {
-                        const applied = await applyTargetSide({
-                            harmony: HARMONIES[payload.harmony] ?? null,
-                            context: {
-                                caster,
-                                casterToken,
-                                actionItem,
-                                targetActor,
-                                targetToken,
-                                amount: Number(payload.amount) || 0,
-                                element: payload.element ?? null,
-                                damageType: payload.damageType ?? null,
-                                casterName: caster?.name ?? null,
-                                relayed: true,
-                            },
-                        });
-                        outcome = {
-                            ok: true,
-                            result: {
-                                healed: applied.healed,
-                                effect: applied.effect,
-                                notes: applied.notes,
-                            },
-                        };
-                    } else {
-                        outcome = { ok: false, reason: "the target actor could not be found" };
-                    }
-                } catch (err) {
-                    outcome = { ok: false, reason: err?.message ? String(err.message) : String(err) };
-                    error("Failed to apply a relayed transfer.", err);
-                }
-
-                game.socket.emit(SOCKET_CHANNEL, {
-                    type: "apply-transfer-result",
-                    requestId: message.requestId,
-                    requesterId: message.requesterId,
-                    ok: outcome.ok,
-                    result: outcome.result ?? null,
-                    reason: outcome.reason ?? null,
-                });
-                return;
-            }
-
-            if (message.type === "apply-transfer-result") {
-                if (message.requesterId !== game.user.id) return;
-                const resolve = pendingRequests.get(message.requestId);
-                if (resolve) {
-                    pendingRequests.delete(message.requestId);
-                    resolve({
-                        ok: Boolean(message.ok),
-                        result: message.result ?? null,
-                        reason: message.reason ?? null,
-                    });
-                }
-                return;
-            }
-
-            // Relay diagnostics: answer a ping so a player can see which clients
-            // are listening and which of them are GMs.
-            if (message.type === "relay-ping") {
-                game.socket.emit(SOCKET_CHANNEL, {
-                    type: "relay-ping-reply",
-                    requesterId: message.requesterId,
-                    userId: game.user.id,
-                    userName: game.user.name,
-                    isGM: Boolean(game.user?.isGM),
-                });
-                return;
-            }
-
-            if (message.type === "relay-ping-reply") {
-                if (message.requesterId !== game.user.id) return;
-                relayPingReplies.push({
-                    id: message.userId ?? null,
-                    name: message.userName ?? null,
-                    isGM: Boolean(message.isGM),
-                });
-            }
-        });
-    }
-
     /* --------------------------- Chat summary ----------------------------- */
 
     async function enrichHtml(html) {
@@ -2170,8 +1922,6 @@
         harmony,
         amount,
         result,
-        relayed,
-        failure = null,
     }) {
         if (!CONFIG.postChatSummary) return;
 
@@ -2222,12 +1972,6 @@
             }.</p>
             ${harmonyLine}
             ${notes.length ? `<ul>${notes.map((note) => `<li>${note}</li>`).join("")}</ul>` : ""}
-            ${relayed ? `<p class="notes">Applied by the GM's client.</p>` : ""}
-            ${
-                failure && CONFIG.relayToGM
-                    ? `<p class="notes">Not applied automatically: ${foundry.utils.escapeHTML(failure)}.</p>`
-                    : ""
-            }
             ${healingPrompt}
             ${harmonyOffer}`;
 
@@ -2328,118 +2072,24 @@
             return false;
         }
 
-        // 2. Apply the target side, locally or through the GM's client.
+        // 2. Apply the target side, when this client is allowed to.
         let result = null;
-        let relayed = false;
-        let failure = null;
-        const canModify = game.user.isGM || targetActor.isOwner;
         try {
-            if (canModify) {
+            if (game.user.isGM || targetActor.isOwner) {
                 result = await applyTargetSide({ harmony, context });
-            } else {
-                const payload = {
-                    harmony: harmony?.slug ?? null,
-                    targetActorUuid: targetActor.uuid,
-                    targetTokenUuid: target?.uuid ?? null,
-                    casterActorUuid: casterToken?.actor?.uuid ?? caster.uuid,
-                    casterTokenUuid: casterToken?.uuid ?? null,
-                    actionItemUuid: actionItem?.uuid ?? null,
-                    element: context.element ?? null,
-                    damageType: context.damageType ?? null,
-                    amount: spend,
-                };
-
-                // The target's own players need no GM: ask them first, then the GMs.
-                // The two routes are alternatives, never both at once, so a single
-                // transfer is never healed twice.
-                const owners = ownerCandidates(targetActor.ownership);
-                const gms = gmCandidates();
-                const attempts = [];
-                let outcome = { ok: false, reason: null };
-
-                for (const owner of owners) {
-                    log(`asking ${owner.name}, who owns ${targetActor.name}, to apply the transfer`);
-                    outcome = await requestRemoteApply(payload, {
-                        audience: "owner",
-                        targetUserId: owner.id,
-                        timeoutMs: CONFIG.relayTimeoutMs,
-                    });
-                    attempts.push(`${owner.name} (owner): ${describeAttempt(outcome)}`);
-                    if (outcome.ok) break;
-                    if (isRealFailure(outcome)) break;
-                }
-
-                if (!outcome.ok && !isRealFailure(outcome)) {
-                    for (const gm of gms) {
-                        log(`asking ${gm.name} to apply the transfer`);
-                        outcome = await requestRemoteApply(payload, {
-                            audience: "gm",
-                            targetUserId: gm.id,
-                            timeoutMs: CONFIG.relayPerCandidateMs ?? 8000,
-                        });
-                        attempts.push(`${gm.name} (GM): ${describeAttempt(outcome)}`);
-                        if (outcome.ok) break;
-                        if (isRealFailure(outcome)) break;
-                    }
-                }
-
-                let reason = outcome.ok ? null : (outcome.reason ?? null);
-
-                if (!outcome.ok) {
-                    // Silence from every client deserves an explanation: a client
-                    // listed as connected may be running no module at all.
-                    const listening = await testRelay({ timeoutMs: 1500 });
-                    const gmReplies = listening.replies.filter((reply) => reply.isGM).length;
-                    log(
-                        `relay finished without applying — ${attempts.join("; ") || "no client was asked"}; ` +
-                            `${listening.replies.length} client(s) answered a relay check (${gmReplies} GM)`,
-                    );
-                    if (!owners.length && !gms.length) reason = "no other client is connected";
-
-                    // Nobody answered the check, so every other client is either absent
-                    // or running a build older than this one. An older GM client only
-                    // acts on an unnamed request, so make one last plain attempt: it
-                    // costs a single timeout and can rescue an out-of-date GM.
-                    if (!listening.replies.length && gms.length) {
-                        const legacy = await requestRemoteApply(payload, {
-                            audience: "gm",
-                            timeoutMs: CONFIG.relayPerCandidateMs ?? 8000,
-                        });
-                        attempts.push(`unnamed GM request: ${describeAttempt(legacy)}`);
-                        if (legacy.ok) {
-                            outcome = legacy;
-                            reason = null;
-                        }
-                    }
-
-                    if (!outcome.ok && !listening.replies.length) {
-                        reason =
-                            `${reason ?? "no client answered"} (no client answered a relay check — ` +
-                            "the other clients are running an older version of this module, or none is connected)";
-                    }
-                }
-
-                if (outcome.ok) {
-                    result = outcome.result;
-                    relayed = true;
-                } else {
-                    failure = reason ?? "no client answered";
-                }
             }
         } catch (err) {
             error("Applying the transfer to the target failed.", err);
             result = null;
-            failure = err?.message ? String(err.message) : String(err);
         }
 
         if (!result) {
             warn(
                 `Transferred ${spend} HP from the vitality network, but ${targetActor.name} could not be ` +
-                    `healed automatically${failure ? ` (${failure})` : ""}. The chat card has a healing link ` +
-                    `and, when a harmony applies, a button to attach it.`,
+                    `healed automatically. The chat card has a healing link and, when a harmony ` +
+                    `applies, a link or button to attach it.`,
             );
         }
-
         // 3. Tell the table what happened.
         await postTransferCard({
             caster,
@@ -2450,8 +2100,6 @@
             harmony,
             amount: spend,
             result,
-            relayed,
-            failure,
         });
 
         return true;
@@ -2581,8 +2229,6 @@
             /** Open the diagnostics window. */
             diagnostics: () => showDiagnosticsDialog(),
 
-            /** Which clients answer the relay, and which of them are GMs. */
-            testRelay: (options) => testRelay(options),
 
             /** Transfer vitality without using the action's chat card. */
             transfer: (actor, { amount = null, targetToken = null } = {}) =>
@@ -2844,8 +2490,7 @@
         const module = game.modules?.get?.(MODULE_ID);
         if (module) module.api = game.sf2eVitalityNetwork;
 
-        registerSocketHandler();
-        // (Foundry ignores hook return values; returning the promise keeps this
+            // (Foundry ignores hook return values; returning the promise keeps this
         // handler awaitable from tests and macros.)
         Hooks.on("createChatMessage", (message) => onChatMessage(message));
 

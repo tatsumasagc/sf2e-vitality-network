@@ -111,7 +111,6 @@ api.transfer(actor, { amount: 10 });    // transfer to the targeted token
 api.applyHarmony(targetActor, { harmony: "shadow", caster: actor });
 api.settings();                         // the settings in effect
 api.diagnostics();                      // open the diagnostics window
-api.testRelay();                        // which clients answer the GM relay
 api.applySettings();                    // re-apply settings after editing them in code
 api.harmonies;                          // the harmony registry itself
 ```
@@ -138,8 +137,8 @@ recognised from PF2e's chat card for `transfer-vitality`; the connection is foun
 class feature or from the Connection feature's `ChoiceSet` selection. Healing goes through
 `actor.applyDamage({ damage: -amount })`, the same path the system uses for healing spells, which is
 what makes the action's void-healing clause behave correctly. When a player cannot edit the target's
-character, the acting client sends the intent over a socket channel and the GM's client applies the
-healing, the effect and the harmony's extra work.
+character, nothing is written to it: the card carries the healing link and the harmony link or button,
+and whoever has permission applies them.
 
 Shadow Harmony's darkness is a token light source at priority 0, so it dims ordinary light and is
 beaten by any light of a higher priority. Healing Harmony reports the afflictions and eligible
@@ -203,8 +202,8 @@ carries `module.json` and `sf2e-vitality-network-<version>.zip`, so a manual dow
 2. Commit and push, then publish the release:
 
    ```
-   gh release create v1.6.1 --title "1.6.1" --notes-file CHANGELOG.md \
-       sf2e-vitality-network/module.json dist/sf2e-vitality-network-1.6.1.zip
+   gh release create v1.7.0 --title "1.7.0" --notes-file CHANGELOG.md \
+       sf2e-vitality-network/module.json dist/sf2e-vitality-network-1.7.0.zip
    ```
 
 `.github/workflows/release.yml` does the same automatically when a `v*` tag is pushed, provided

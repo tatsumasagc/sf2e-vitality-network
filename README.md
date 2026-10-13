@@ -167,7 +167,7 @@ mid-session immediately gets the new limits.
 | `sf2e-vitality-network/reference/*.json` | Reference copies of the Shadow, Akashic and Elemental harmony effects. |
 | `sf2e-vitality-network/README.md` | The module's own README, for whoever installs it. |
 | `sf2e-vitality-network/LICENSE` | MIT licence (replace the placeholder holder before publishing). |
-| `dist/sf2e-vitality-network-1.6.1.zip` | The packaged module, for Foundry's *Install from File*. |
+| `dist/sf2e-vitality-network-1.7.0.zip` | The packaged module, for Foundry's *Install from File*. |
 | `CHANGELOG.md` | Version history, matching the version in `module.json`. |
 | `.github/workflows/release.yml` | Publishes a release carrying `module.json` and the module zip whenever a version tag is pushed. |
 | `.gitignore` | Keeps the built zips and editor noise out of the repository. |
@@ -185,7 +185,7 @@ onto a target by hand if you ever need to.
 
 1. Copy the `sf2e-vitality-network` folder into your Foundry user data directory under `Data/modules/`,
    so that `Data/modules/sf2e-vitality-network/module.json` exists. Alternatively use
-   `dist/sf2e-vitality-network-1.6.1.zip` with Foundry's *Install Module* > *Install from File* screen,
+   `dist/sf2e-vitality-network-1.7.0.zip` with Foundry's *Install Module* > *Install from File* screen,
    or point *Install Module* > *Manifest URL* at the release manifest (see the project's GitHub page).
 2. Enable **SF2E Vitality Network and Harmony** in your world's *Manage Modules* screen and save.
 3. Configure it under **Configure Settings > Module Settings**. The defaults follow the printed rules,
@@ -234,7 +234,7 @@ avoids editing `world.json` and is the quickest way to try the automation out.
 Open the browser console (F12) after logging in. You should see:
 
 ```
-SF2E Vitality Network | v1.6.1 loaded. Try game.sf2eVitalityNetwork.debug(game.user.character) to check setup.
+SF2E Vitality Network | v1.7.0 loaded. Try game.sf2eVitalityNetwork.debug(game.user.character) to check setup.
 ```
 
 If the console instead reports that the world is not running the PF2e system, the script has detected
@@ -246,8 +246,8 @@ a non-PF2e world and is deliberately inert.
 
 The everyday switches are Foundry settings, under **Configure Settings → Module Settings**: the
 capacity correction, the Refocus refill, the transfer progression, the harmony fallback and the
-per-harmony toggles, the elemental damage-type override, the combat-only recharge, the dialog and
-relay behaviour, and verbose logging. A JSON setting ("Advanced overrides") merges any of the plain
+per-harmony toggles, the elemental damage-type override, the combat-only recharge, the dialog
+behaviour, and verbose logging. A JSON setting ("Advanced overrides") merges any of the plain
 data below over the built-in values, for example
 `{"transfer":{"progression":"houseRule"},"recharge":{"master":9}}`; unknown keys and the capacity
 formulas are ignored. Registered settings are applied over the defaults each time the world loads.
@@ -285,7 +285,6 @@ when the file is used as a world script instead of a module.
 | `healing.conditions` | blinded, clumsy, dazzled, deafened, enfeebled, sickened | Conditions Healing Harmony may counteract. |
 | `healing.perfectHarmonyLevel` / `.perfectHarmonyConditions` | 19 / doomed, drained, paralyzed, stunned | The 19th-level addition. |
 | `singleClientDialogs` | true | Only the client that created the action's chat card shows the dialog. |
-| `relayToGM` / `relayTimeoutMs` | true / 8000 | Ask the GM's client to apply target-side changes. |
 | `postChatSummary` | true | Post a summary card for the transfer. |
 | `rechargeInCombatOnly` | true | Only recharge during an active combat. |
 | `verboseLogging` | false | Trace decisions in the console. |
@@ -343,7 +342,7 @@ effect data for each harmony, the dialogs and the guard clauses:
 node vitality-network/test/smoke-test.mjs
 ```
 
-It currently reports `152/152 checks passed`.
+It currently reports `137/137 checks passed`.
 
 ---
 
@@ -367,7 +366,6 @@ api.applyHarmony(targetActor, { harmony: "shadow", caster: actor });
 api.settings();                         // the settings in effect
 api.applySettings();                    // re-apply settings after changing them in code
 api.diagnostics();                      // open the diagnostics window
-api.testRelay();                        // which clients answer the GM relay
 api.harmonies;                          // the harmony registry itself
 ```
 
@@ -412,11 +410,9 @@ is the same path the system uses for healing spells and abilities, and it is wha
 void-healing clause on the action work without any special handling in this script.
 
 **Multiplayer permissions.** A player cannot edit another player's character. When the acting client
-cannot modify the target, it sends the intent over a socket channel (`module.sf2e-vitality-network`),
-including which harmony to apply and any element choice, and the GM's client performs the healing,
-the effect creation and the harmony's extra work, then acknowledges. If no GM is connected the script
-still spends the vitality and tells the player exactly what to apply by hand. The channel trusts the
-clients in your world, in the same way as socketlib-based modules do.
+cannot modify the target, the vitality is still spent and the card carries what the table needs: the
+healing as a damage link, and the harmony as a link or a button. Nothing is written to another
+player's character without permission over it.
 
 ---
 
@@ -476,7 +472,7 @@ everything else follows the printed text.
 | Refocus does not refill the network | Check `refocus.enabled`, and note that the focus-pool fallback needs the character to have a focus pool; `refocus.classFeatureOnly: true` would exclude an archetype mystic. |
 | The network recharges or refills several times | Another copy of the script or a similar module is also running; only one client should write to the network. |
 | The wrong harmony is applied | Run `api.debug(actor)` and look at `connections` and `harmony`. If the connection was not found, the configured fallback was used; drag the connection class feature onto the actor, or pick it in the Connection item's prompt. |
-| The healing is applied but the effect is not | Check the target actor's permissions and whether a GM was connected; the relay needs an active GM. |
+| The healing is applied but the effect is not | Check the target actor's permissions: whoever applies it must own the character, or the GM does it. |
 | The area does not darken | Confirm the target's token has vision/lighting enabled and that the scene uses darkness or bright light; a negative light source only shows an effect where there is light to reduce. |
 | Elemental Harmony does not change the damage type | Check `elemental.damageTypeOverride` is true, and that the Strike's damage dice are the weapon's own; the override changes the base damage type, not added damage such as a rune's. |
 | `source.override` | `"auto"` | `"auto"` reads the granting item; the other values force one reading for copies whose source id has been lost. |

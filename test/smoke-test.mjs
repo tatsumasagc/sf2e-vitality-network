@@ -14,7 +14,7 @@ import vm from "node:vm";
 const SCRIPT_PATH = new URL("../sf2e-vitality-network/sf2e-vitality-network.js", import.meta.url);
 
 // Documents the world knows about, so `fromUuid` behaves like Foundry's — the
-// GM's client has to resolve the target and caster a player's relay names.
+// The card has to resolve the target and the caster the transfer names.
 const documents = new Map();
 const registerDoc = (doc) => {
     if (doc?.uuid) documents.set(doc.uuid, doc);
@@ -57,7 +57,7 @@ function fakeForm(content, overrides = {}) {
     return { elements };
 }
 
-function makeEnvironment({ systemId = "pf2e", systemVersion = "8.6.0", isGM = true, userId = "user-1", socket = null } = {}) {
+function makeEnvironment({ systemId = "pf2e", systemVersion = "8.6.0", isGM = true, userId = "user-1" } = {}) {
     const state = {
         created: [],
         damage: [],
@@ -94,7 +94,6 @@ function makeEnvironment({ systemId = "pf2e", systemVersion = "8.6.0", isGM = tr
         actors: [],
         time: { worldTime: 1000 },
         combat: { id: "combat-1", started: true, round: 1, turn: 0, combatant: null },
-        socket: socket ?? { on: () => {}, emit: () => {} },
         pf2e: {},
         i18n: {
             localize: (key) => key,
@@ -1063,107 +1062,7 @@ check(
     String(concurrentCaster.system.resources.vitalityNetwork.value),
 );
 
-/* --- 17. A transfer to a character the player does not own ---------------- */
-
-// Two clients sharing one socket: a GM, and a player who owns neither the GM's
-// actors nor the target.
-const sharedClients = [];
-const loopbackSocket = {
-    on: (channel, handler) => sharedClients.push({ channel, handler }),
-    emit: (channel, message) => {
-        for (const client of sharedClients.slice()) {
-            if (client.channel === channel) void client.handler(message);
-        }
-    },
-};
-
-const gmEnv = makeEnvironment({ socket: loopbackSocket, userId: "gm-1", isGM: true });
-await gmEnv.Hooks.fireOnce("init");
-await gmEnv.Hooks.fireOnce("ready");
-
-const playerEnv = makeEnvironment({ socket: loopbackSocket, userId: "user-1", isGM: false });
-await playerEnv.Hooks.fireOnce("init");
-await playerEnv.Hooks.fireOnce("ready");
-
-// The player's client can see the GM, and the target belongs to someone else.
-playerEnv.game.users.contents = [gmEnv.game.user, playerEnv.game.user];
-playerEnv.game.users.activeGM = gmEnv.game.user;
-gmEnv.game.users.contents = [gmEnv.game.user, playerEnv.game.user];
-
-const relayTarget = makeTarget(playerEnv.state, { isOwner: false });
-playerEnv.game.user.targets = new Set([{ document: relayTarget.targetToken }]);
-playerEnv.state.dialogOverrides = { amount: 8 };
-playerEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
-
-const relayCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
-const relayAction = {
-    name: "Transfer Vitality",
-    slug: "transfer-vitality",
-    uuid: "Actor.caster.Item.action",
-    actor: relayCaster,
-};
-
-await playerEnv.Hooks.call("createChatMessage", {
-    id: "msg-relay-1",
-    author: { id: "user-1" },
-    item: relayAction,
-    actor: relayCaster,
-    flags: {},
-});
-
-check(
-    "the network is spent even when the target is not the player's",
-    relayCaster.system.resources.vitalityNetwork.value === 12,
-    String(relayCaster.system.resources.vitalityNetwork.value),
-);
-check(
-    "the GM's client healed the target",
-    playerEnv.state.damage.at(-1)?.damage === -8,
-    JSON.stringify(playerEnv.state.damage.at(-1) ?? null),
-);
-check(
-    "the summary says the GM applied it",
-    /Applied by the GM's client/.test(playerEnv.state.messages.at(-1)?.content ?? ""),
-    String(playerEnv.state.messages.at(-1)?.content ?? "").slice(0, 120),
-);
-check(
-    "the summary does not report a failure",
-    !/Not applied automatically/.test(playerEnv.state.messages.at(-1)?.content ?? ""),
-    String(playerEnv.state.messages.at(-1)?.content ?? "").slice(0, 120),
-);
-
-/* Nobody can apply it: no GM online, and no client owns the target. */
-
-const lonelyEnv = makeEnvironment({ socket: loopbackSocket, userId: "user-9", isGM: false });
-await lonelyEnv.Hooks.fireOnce("init");
-await lonelyEnv.Hooks.fireOnce("ready");
-lonelyEnv.game.users.contents = [lonelyEnv.game.user];
-lonelyEnv.game.users.activeGM = null;
-lonelyEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 30;
-lonelyEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
-
-const lonelyTarget = makeTarget(lonelyEnv.state, { isOwner: false });
-lonelyEnv.game.user.targets = new Set([{ document: lonelyTarget.targetToken }]);
-lonelyEnv.state.dialogOverrides = { amount: 4 };
-const lonelyCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
-
-await lonelyEnv.Hooks.call("createChatMessage", {
-    id: "msg-relay-2",
-    author: { id: "user-9" },
-    item: { ...relayAction, actor: lonelyCaster },
-    actor: lonelyCaster,
-    flags: {},
-});
-
-check(
-    "the summary explains why nothing could be applied",
-            /no other client is connected/.test(lonelyEnv.state.messages.at(-1)?.content ?? ""),
-    String(lonelyEnv.state.messages.at(-1)?.content ?? "").slice(0, 160),
-);
-
-
-
-/* --- 18. Refocus from a macro card --------------------------------------- */
+/* --- 17. Refocus from a macro card --------------------------------------- */
 
 const macroEnv = makeEnvironment();
 await macroEnv.Hooks.fireOnce("init");
@@ -1200,7 +1099,7 @@ check(
     String(quietCaster.system.resources.vitalityNetwork.value),
 );
 
-/* --- 19. The workbench Refocus card, and the relay diagnostic ------------- */
+/* --- 19. The workbench Refocus card ------------- */
 
 // The workbench macro posts its wording in the *flavour* and leaves the content as
 // the localised "regains N focus points" line, so the flavour is the only clue.
@@ -1226,212 +1125,9 @@ check(
     String(workbenchCaster.system.resources.vitalityNetwork.value),
 );
 
-// The relay diagnostic should report the GM client and the candidate list.
-const relayReport = await playerEnv.game.sf2eVitalityNetwork.testRelay({ timeoutMs: 20 });
-check(
-    "the relay diagnostic finds the GM's client",
-    relayReport.replies.some((reply) => reply.id === "gm-1"),
-    JSON.stringify(relayReport.replies),
-);
-check(
-    "the relay diagnostic lists the GM as a candidate",
-    relayReport.candidates.some((user) => user.id === "gm-1"),
-    JSON.stringify(relayReport.candidates),
-);
+/* --- 18. The card is the output -------------------------------------------- */
 
-/* --- 20. A listed GM whose client runs no module -------------------------- */
-
-const silentClients = [];
-const silentSocket = {
-    on: (channel, handler) => silentClients.push({ channel, handler }),
-    emit: (channel, message) => {
-        for (const client of silentClients.slice()) {
-            if (client.channel === channel) void client.handler(message);
-        }
-    },
-};
-
-// The target's owner runs the module; the GM who is listed as connected does not.
-const ownerEnv = makeEnvironment({ socket: silentSocket, userId: "user-1", isGM: false });
-await ownerEnv.Hooks.fireOnce("init");
-await ownerEnv.Hooks.fireOnce("ready");
-
-const ownerTarget = makeTarget(ownerEnv.state, { isOwner: true });
-const ghostGm = { id: "gm-ghost", name: "Ghost GM", isGM: true, active: true };
-
-const ignoredEnv = makeEnvironment({ socket: silentSocket, userId: "user-9", isGM: false });
-await ignoredEnv.Hooks.fireOnce("init");
-await ignoredEnv.Hooks.fireOnce("ready");
-ignoredEnv.game.users.contents = [ghostGm, ownerEnv.game.user, ignoredEnv.game.user];
-ignoredEnv.game.users.activeGM = ghostGm;
-ignoredEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 40;
-ignoredEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
-ignoredEnv.game.sf2eVitalityNetwork.config.relayPerCandidateMs = 40;
-ignoredEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
-ignoredEnv.game.user.targets = new Set([{ document: ownerTarget.targetToken }]);
-ignoredEnv.state.dialogOverrides = { amount: 6 };
-
-const ignoredCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
-await ignoredEnv.Hooks.call("createChatMessage", {
-    id: "msg-ghost-gm",
-    author: { id: "user-9" },
-    item: {
-        name: "Transfer Vitality",
-        slug: "transfer-vitality",
-        uuid: "Actor.caster.Item.action",
-        actor: ignoredCaster,
-    },
-    actor: ignoredCaster,
-    flags: {},
-});
-
-check(
-    "the network is spent when the listed GM's client runs no module",
-    ignoredCaster.system.resources.vitalityNetwork.value === 14,
-    String(ignoredCaster.system.resources.vitalityNetwork.value),
-);
-check(
-    "the target's owner applies the transfer instead",
-    ownerEnv.state.damage.at(-1)?.damage === -6,
-    JSON.stringify(ownerEnv.state.damage.at(-1) ?? null),
-);
-
-/* --- 21. The target's own player applies it, with no GM --------------------- */
-
-const wiredClients = [];
-const wiredSocket = {
-    on: (channel, handler) => wiredClients.push({ channel, handler }),
-    emit: (channel, message) => {
-        for (const client of wiredClients.slice()) {
-            if (client.channel === channel) void client.handler(message);
-        }
-    },
-};
-
-// The target's owner is listening; the GM who is listed as connected is not.
-const ownTargetEnv = makeEnvironment({ socket: wiredSocket, userId: "user-1", isGM: false });
-await ownTargetEnv.Hooks.fireOnce("init");
-await ownTargetEnv.Hooks.fireOnce("ready");
-
-const ownedTarget = makeTarget(ownTargetEnv.state, { isOwner: true });
-ownedTarget.targetActor.ownership = { "user-1": 3, default: 0 };
-const deafGm = makeEnvironment({ userId: "gm-1", isGM: true });
-const deafGmUser = deafGm.game.user;
-
-const ownerFirstEnv = makeEnvironment({ socket: wiredSocket, userId: "user-9", isGM: false });
-await ownerFirstEnv.Hooks.fireOnce("init");
-await ownerFirstEnv.Hooks.fireOnce("ready");
-ownerFirstEnv.game.users.contents = [deafGmUser, ownTargetEnv.game.user, ownerFirstEnv.game.user];
-ownerFirstEnv.game.users.activeGM = deafGmUser;
-ownerFirstEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 40;
-ownerFirstEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
-ownerFirstEnv.game.sf2eVitalityNetwork.config.relayPerCandidateMs = 40;
-ownerFirstEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
-ownerFirstEnv.game.user.targets = new Set([{ document: ownedTarget.targetToken }]);
-ownerFirstEnv.state.dialogOverrides = { amount: 8 };
-
-const ownerFirstCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
-await ownerFirstEnv.Hooks.call("createChatMessage", {
-    id: "msg-owner-first",
-    author: { id: "user-9" },
-    item: {
-        name: "Transfer Vitality",
-        slug: "transfer-vitality",
-        uuid: "Actor.caster.Item.action",
-        actor: ownerFirstCaster,
-    },
-    actor: ownerFirstCaster,
-    flags: {},
-});
-
-check(
-    "the network is spent when the target's owner is asked",
-    ownerFirstCaster.system.resources.vitalityNetwork.value === 12,
-    String(ownerFirstCaster.system.resources.vitalityNetwork.value),
-);
-check(
-    "the target's own player applies the transfer",
-    ownTargetEnv.state.damage.at(-1)?.damage === -8,
-    JSON.stringify(ownTargetEnv.state.damage.at(-1) ?? null),
-);
-check(
-    "the deaf GM's client never applied anything",
-    deafGm.state.damage.length === 0,
-    String(deafGm.state.damage.length),
-);
-
-/* --- 22. An out-of-date GM client that ignores named requests --------------- */
-
-// A build older than 1.4.4 ignores the targetUserId field and answers pings not at
-// all, so it only ever acts on an unnamed request — exactly what the last-resort
-// attempt sends.
-const legacyClients = [];
-const legacySocket = {
-    on: (channel, handler) => legacyClients.push({ channel, handler }),
-    emit: (channel, message) => {
-        for (const client of legacyClients.slice()) {
-            if (client.channel !== channel) continue;
-            if (message.type === "relay-ping") continue;
-            if (message.type === "apply-transfer" && message.targetUserId) continue;
-            void client.handler(message);
-        }
-    },
-};
-
-const legacyTargetEnv = makeEnvironment({ socket: legacySocket, userId: "user-1", isGM: false });
-await legacyTargetEnv.Hooks.fireOnce("init");
-await legacyTargetEnv.Hooks.fireOnce("ready");
-const legacyTarget = makeTarget(legacyTargetEnv.state, { isOwner: false });
-
-const legacyGmEnv = makeEnvironment({ socket: legacySocket, userId: "gm-1", isGM: true });
-await legacyGmEnv.Hooks.fireOnce("init");
-await legacyGmEnv.Hooks.fireOnce("ready");
-
-const legacyEnv = makeEnvironment({ socket: legacySocket, userId: "user-9", isGM: false });
-await legacyEnv.Hooks.fireOnce("init");
-await legacyEnv.Hooks.fireOnce("ready");
-legacyEnv.game.users.contents = [legacyGmEnv.game.user, legacyTargetEnv.game.user, legacyEnv.game.user];
-legacyEnv.game.users.activeGM = legacyGmEnv.game.user;
-legacyEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 40;
-legacyEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
-legacyEnv.game.sf2eVitalityNetwork.config.relayPerCandidateMs = 40;
-legacyEnv.game.sf2eVitalityNetwork.config.relayToGM = true;
-legacyEnv.game.user.targets = new Set([{ document: legacyTarget.targetToken }]);
-legacyEnv.state.dialogOverrides = { amount: 5 };
-
-const legacyCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
-await legacyEnv.Hooks.call("createChatMessage", {
-    id: "msg-legacy-gm",
-    author: { id: "user-9" },
-    item: {
-        name: "Transfer Vitality",
-        slug: "transfer-vitality",
-        uuid: "Actor.caster.Item.action",
-        actor: legacyCaster,
-    },
-    actor: legacyCaster,
-    flags: {},
-});
-
-check(
-    "an out-of-date GM still applies the transfer",
-    legacyTargetEnv.state.damage.at(-1)?.damage === -5,
-    JSON.stringify(legacyTargetEnv.state.damage.at(-1) ?? null),
-);
-check(
-    "the network is spent when the out-of-date GM applies it",
-    legacyCaster.system.resources.vitalityNetwork.value === 15,
-    String(legacyCaster.system.resources.vitalityNetwork.value),
-);
-check(
-    "the summary does not report a failure",
-    !/Not applied automatically|could not be healed/.test(legacyEnv.state.messages.at(-1)?.content ?? ""),
-    String(legacyEnv.state.messages.at(-1)?.content ?? "").slice(0, 140),
-);
-
-/* --- 23. The card is the output -------------------------------------------- */
-
-// With the relay off there is no automation at all, so the card has to carry what
+// With no permission over the target there is no automation, so the card carries what
 // the table needs: a healing chip and a draggable link to the harmony effect.
 const templateItems = [];
 
@@ -1450,7 +1146,6 @@ await manualEnv.Hooks.fireOnce("ready");
 const manualTarget = makeTarget(manualEnv.state, { isOwner: false });
 const manualCaster = makeCaster({ level: 10, value: 20, max: 20, connection: "shadow" });
 manualEnv.game.user.targets = new Set([{ document: manualTarget.targetToken }]);
-manualEnv.game.sf2eVitalityNetwork.config.relayToGM = false;
 manualEnv.state.dialogOverrides = { amount: 7 };
 
 await manualEnv.Hooks.call("createChatMessage", {
@@ -1495,7 +1190,7 @@ check(
     String(templateItems.length),
 );
 check(
-    "the card says nothing about a failed relay",
+    "the card says nothing about a failure",
     !/Not applied automatically/.test(manualHtml),
     manualHtml.slice(0, 220),
 );
@@ -1520,7 +1215,6 @@ await packEnv.Hooks.fireOnce("ready");
 const packTarget = makeTarget(packEnv.state, { isOwner: false });
 const packCaster = makeCaster({ level: 10, value: 20, max: 20, connection: "shadow" });
 packEnv.game.user.targets = new Set([{ document: packTarget.targetToken }]);
-packEnv.game.sf2eVitalityNetwork.config.relayToGM = false;
 packEnv.state.dialogOverrides = { amount: 6 };
 
 await packEnv.Hooks.call("createChatMessage", {
@@ -1560,7 +1254,6 @@ await fallbackEnv.Hooks.fireOnce("ready");
 const fallbackTarget = makeTarget(fallbackEnv.state, { isOwner: false });
 const fallbackCaster = makeCaster({ level: 10, value: 20, max: 20, connection: "shadow" });
 fallbackEnv.game.user.targets = new Set([{ document: fallbackTarget.targetToken }]);
-fallbackEnv.game.sf2eVitalityNetwork.config.relayToGM = false;
 fallbackEnv.state.dialogOverrides = { amount: 4 };
 
 await fallbackEnv.Hooks.call("createChatMessage", {
