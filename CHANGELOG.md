@@ -156,3 +156,16 @@ Initial version.
   running an older version of this module, or none is connected".
 
 ## 1.4.6
+## 1.5.0
+
+- **The chat card can hand the work to the table.** When the healing is not applied automatically,
+  the card now carries a clickable `@Damage[N[healing]]` link — click it and the card that opens has an
+  **Apply Healing** button for whoever has permission over the target. PF2e expresses healing as the
+  `healing` flavour, so no negative amount is used (PF2e clamps those to 1).
+- **The card also offers the harmony as a button.** The effect data rides on the message, so pressing
+  "Apply Shadow Harmony to <name>" attaches it — the client that presses it is the one with permission,
+  so no relay is involved.
+- Switching `relay.config.relayToGM` off now gives you exactly this: no relay attempt at all, just the
+  card with its healing link and effect button.
+
+## 1.4.7

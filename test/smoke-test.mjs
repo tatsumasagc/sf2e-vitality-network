@@ -1421,6 +1421,56 @@ check(
     String(legacyEnv.state.messages.at(-1)?.content ?? "").slice(0, 140),
 );
 
+/* --- 23. The card's manual fallback ---------------------------------------- */
+
+// With the relay switched off there is no automation at all, so the card has to
+// carry everything the table needs: a healing link and a button for the effect.
+const manualEnv = makeEnvironment({ userId: "user-9", isGM: false });
+await manualEnv.Hooks.fireOnce("init");
+await manualEnv.Hooks.fireOnce("ready");
+const manualTarget = makeTarget(manualEnv.state, { isOwner: false });
+const manualCaster = makeCaster({ level: 10, value: 20, max: 20, connection: "shadow" });
+manualEnv.game.user.targets = new Set([{ document: manualTarget.targetToken }]);
+manualEnv.game.sf2eVitalityNetwork.config.relayToGM = false;
+manualEnv.state.dialogOverrides = { amount: 7 };
+
+await manualEnv.Hooks.call("createChatMessage", {
+    id: "msg-manual-card",
+    author: { id: manualEnv.game.user.id },
+    item: {
+        name: "Transfer Vitality",
+        slug: "transfer-vitality",
+        uuid: "Actor.caster.Item.action",
+        actor: manualCaster,
+    },
+    actor: manualCaster,
+    flags: {},
+});
+
+const manualCard = manualEnv.state.messages.at(-1);
+const manualHtml = String(manualCard?.content ?? "");
+
+check(
+    "the card offers a clickable healing link",
+    /@Damage\[7\[healing\]\]/.test(manualHtml),
+    manualHtml.slice(0, 200),
+);
+check(
+    "the healing is not written as a negative amount",
+    !/@Damage\[-7\]/.test(manualHtml),
+    manualHtml.slice(0, 200),
+);
+check(
+    "the card offers the harmony button",
+    /class="sf2e-vn-apply-harmony"/.test(manualHtml),
+    manualHtml.slice(0, 200),
+);
+check(
+    "the card carries the effect data for the button",
+    Boolean(manualCard?.flags?.["sf2e-vitality-network"]?.pendingHarmony?.effect),
+    JSON.stringify(Object.keys(manualCard?.flags?.["sf2e-vitality-network"] ?? {})),
+);
+
 /* -------------------------------------------------------------------------- */
 /*  Summary                                                                    */
 /* -------------------------------------------------------------------------- */
