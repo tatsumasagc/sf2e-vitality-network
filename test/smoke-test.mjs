@@ -1354,6 +1354,73 @@ check(
     String(deafGm.state.damage.length),
 );
 
+/* --- 22. An out-of-date GM client that ignores named requests --------------- */
+
+// A build older than 1.4.4 ignores the targetUserId field and answers pings not at
+// all, so it only ever acts on an unnamed request — exactly what the last-resort
+// attempt sends.
+const legacyClients = [];
+const legacySocket = {
+    on: (channel, handler) => legacyClients.push({ channel, handler }),
+    emit: (channel, message) => {
+        for (const client of legacyClients.slice()) {
+            if (client.channel !== channel) continue;
+            if (message.type === "relay-ping") continue;
+            if (message.type === "apply-transfer" && message.targetUserId) continue;
+            void client.handler(message);
+        }
+    },
+};
+
+const legacyTargetEnv = makeEnvironment({ socket: legacySocket, userId: "user-1", isGM: false });
+await legacyTargetEnv.Hooks.fireOnce("init");
+await legacyTargetEnv.Hooks.fireOnce("ready");
+const legacyTarget = makeTarget(legacyTargetEnv.state, { isOwner: false });
+
+const legacyGmEnv = makeEnvironment({ socket: legacySocket, userId: "gm-1", isGM: true });
+await legacyGmEnv.Hooks.fireOnce("init");
+await legacyGmEnv.Hooks.fireOnce("ready");
+
+const legacyEnv = makeEnvironment({ socket: legacySocket, userId: "user-9", isGM: false });
+await legacyEnv.Hooks.fireOnce("init");
+await legacyEnv.Hooks.fireOnce("ready");
+legacyEnv.game.users.contents = [legacyGmEnv.game.user, legacyTargetEnv.game.user, legacyEnv.game.user];
+legacyEnv.game.users.activeGM = legacyGmEnv.game.user;
+legacyEnv.game.sf2eVitalityNetwork.config.relayTimeoutMs = 40;
+legacyEnv.game.sf2eVitalityNetwork.config.relayPerCandidateMs = 40;
+legacyEnv.game.user.targets = new Set([{ document: legacyTarget.targetToken }]);
+legacyEnv.state.dialogOverrides = { amount: 5 };
+
+const legacyCaster = makeCaster({ level: 10, value: 20, max: 20, connection: null });
+await legacyEnv.Hooks.call("createChatMessage", {
+    id: "msg-legacy-gm",
+    author: { id: "user-9" },
+    item: {
+        name: "Transfer Vitality",
+        slug: "transfer-vitality",
+        uuid: "Actor.caster.Item.action",
+        actor: legacyCaster,
+    },
+    actor: legacyCaster,
+    flags: {},
+});
+
+check(
+    "an out-of-date GM still applies the transfer",
+    legacyTargetEnv.state.damage.at(-1)?.damage === -5,
+    JSON.stringify(legacyTargetEnv.state.damage.at(-1) ?? null),
+);
+check(
+    "the network is spent when the out-of-date GM applies it",
+    legacyCaster.system.resources.vitalityNetwork.value === 15,
+    String(legacyCaster.system.resources.vitalityNetwork.value),
+);
+check(
+    "the summary does not report a failure",
+    !/Not applied automatically|could not be healed/.test(legacyEnv.state.messages.at(-1)?.content ?? ""),
+    String(legacyEnv.state.messages.at(-1)?.content ?? "").slice(0, 140),
+);
+
 /* -------------------------------------------------------------------------- */
 /*  Summary                                                                    */
 /* -------------------------------------------------------------------------- */

@@ -66,7 +66,7 @@
     const MODULE_ID = "sf2e-vitality-network";
     const SCRIPT_ID = MODULE_ID; // flag namespace, kept stable for existing effects
     const SOCKET_CHANNEL = `module.${MODULE_ID}`;
-    const VERSION = "1.4.6";
+    const VERSION = "1.4.7";
     const SOURCE_BOOK = "Starfinder Player Core";
 
     /** The feat that turns the transfer automation on (matched on item id). */
@@ -2275,8 +2275,27 @@
                             `${listening.replies.length} client(s) answered a relay check (${gmReplies} GM)`,
                     );
                     if (!owners.length && !gms.length) reason = "no other client is connected";
-                    else if (!listening.replies.length) {
-                        reason = `${reason ?? "no client answered"} (no client answered a relay check)`;
+
+                    // Nobody answered the check, so every other client is either absent
+                    // or running a build older than this one. An older GM client only
+                    // acts on an unnamed request, so make one last plain attempt: it
+                    // costs a single timeout and can rescue an out-of-date GM.
+                    if (!listening.replies.length && gms.length) {
+                        const legacy = await requestRemoteApply(payload, {
+                            audience: "gm",
+                            timeoutMs: CONFIG.relayPerCandidateMs ?? 8000,
+                        });
+                        attempts.push(`unnamed GM request: ${describeAttempt(legacy)}`);
+                        if (legacy.ok) {
+                            outcome = legacy;
+                            reason = null;
+                        }
+                    }
+
+                    if (!outcome.ok && !listening.replies.length) {
+                        reason =
+                            `${reason ?? "no client answered"} (no client answered a relay check — ` +
+                            "the other clients are running an older version of this module, or none is connected)";
                     }
                 }
 

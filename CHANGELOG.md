@@ -146,3 +146,13 @@ Initial version.
   (`relay.config.relayPerCandidateMs`).
 
 ## 1.4.5
+## 1.4.7
+
+- **An out-of-date GM client can still apply a transfer.** When nobody answers the relay check, every
+  other client is running an older build (or none is connected). Older builds ignore the client name and
+  only act on an unnamed request, so one last plain request is sent before giving up. It costs a single
+  timeout and cannot cause a second application: whichever client acts is still just one.
+- **The failure message now names the cause**: "no client answered a relay check — the other clients are
+  running an older version of this module, or none is connected".
+
+## 1.4.6
