@@ -8,3 +8,4 @@
 *.zip binary
 *.ttf binary
 *.woff2 binary
+sf2e-vitality-network/packs/** -text
