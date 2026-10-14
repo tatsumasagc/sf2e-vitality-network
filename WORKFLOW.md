@@ -1,9 +1,9 @@
 # SF2E Vitality Network — how the module works
 
-**Version described: 1.7.0** · Foundry v13/v14 · PF2e 8.6.x with sf2e-anachronism, or the SF2e system
+**Version described: 1.7.1** · Foundry v13/v14 · PF2e 8.6.x with sf2e-anachronism, or the SF2e system
 
 This is the full behaviour of the module as it stands, in the order things happen. Nothing here is
-aspirational: every step below is implemented and covered by the test suite (137 checks).
+aspirational: every step below is implemented and covered by the test suite (140 checks).
 
 ---
 
@@ -117,7 +117,10 @@ target, and the healing link renders as a chip whose card carries the Apply Heal
 - The **effect link** points at the module's own compendium, `Vitality Network Harmonies`, which
   holds one item per harmony named the way PF2e names effects (`Effect: Shadow Harmony`). Its UUID
   resolves on **any client with the module installed**, so whoever has permission can drag it onto
-  the target from the card. Where the pack is missing, a world item of that name is used; where
+  the target from the card. Foundry requires every Item pack to name the system it is compatible
+  with, so the manifest declares two: `harmonies` for PF2e and `harmonies-sf2e` for SF2e, and the
+  card links whichever the world has loaded. Where no pack is present, a world item of that name is
+  used; where
   neither exists, the button is the fallback.
 - If that item cannot be created — a player without permission to create world items — the card
   falls back to a **button** carrying the effect's data, which attaches it to the target for whoever
@@ -187,7 +190,8 @@ Everything is reachable at `game.sf2eVitalityNetwork` (and `game.modules.get("sf
 | `sf2e-vitality-network/lang/en.json` | Localisation keys. |
 | `sf2e-vitality-network/styles/vitality-network.css` | Card styling. |
 | `sf2e-vitality-network/*-harmony-effect.json` | Reference effect items for hand-made copies. |
-| `sf2e-vitality-network/packs/harmonies/` | The compendium, in Foundry's LevelDB format. |
+| `sf2e-vitality-network/packs/harmonies/` | The compendium for PF2e, in Foundry's LevelDB format. |
+| `sf2e-vitality-network/packs/harmonies-sf2e/` | The same items declared for the SF2e system. |
 | `pack-sources/*.json` | The pack's items as readable JSON; the pack is built from these. |
 | `test/smoke-test.mjs` | The 148-check suite (`node test/smoke-test.mjs`). |
 | `dist/` | Packaged releases. |

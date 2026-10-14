@@ -3,6 +3,17 @@
 All notable changes to **SF2E Vitality Network and Harmony** are recorded here. The version number
 matches `sf2e-vitality-network/module.json`.
 
+## 1.7.1
+
+- **Fixed the manifest, which blocked updating.** Foundry requires every Item pack to declare the
+  system it is compatible with, and 1.7.0's pack declared none, so Foundry rejected the manifest with
+  *"The Compendium pack harmonies of the Item type must declare the system upon which it depends"*.
+- The module now ships **one compendium per system** — `harmonies` for PF2e and `harmonies-sf2e` for
+  SF2e — built from the same sources, and links whichever copy the world has loaded. Both hold the
+  same five items with the same ids, so the card's link stays valid either way.
+- The test suite is 140 checks, including that every declared pack names its system and exists in the
+  package — the check that would have caught this before release.
+
 ## 1.7.0
 
 - **The GM relay is gone.** The socket channel, the request machinery, the candidate search, the
