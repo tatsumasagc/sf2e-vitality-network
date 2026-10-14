@@ -1239,6 +1239,48 @@ check(
     packHtml.slice(0, 260),
 );
 
+// In an SF2e world it is the SF2e copy of the compendium that Foundry loads, so
+// the card has to link that one.
+const sf2eEnv = makeEnvironment({ systemId: "sf2e", userId: "user-9", isGM: false });
+sf2eEnv.game.packs = {
+    get: (id) =>
+        id === "sf2e-vitality-network.harmonies-sf2e"
+            ? {
+                  index: {
+                      get: (itemId) =>
+                          itemId === "ShadowHarmony001" ? { name: "Effect: Shadow Harmony" } : undefined,
+                  },
+              }
+            : undefined,
+};
+await sf2eEnv.Hooks.fireOnce("init");
+await sf2eEnv.Hooks.fireOnce("ready");
+
+const sf2eTarget = makeTarget(sf2eEnv.state, { isOwner: false });
+const sf2eCaster = makeCaster({ level: 10, value: 20, max: 20, connection: "shadow" });
+sf2eEnv.game.user.targets = new Set([{ document: sf2eTarget.targetToken }]);
+sf2eEnv.state.dialogOverrides = { amount: 3 };
+
+await sf2eEnv.Hooks.call("createChatMessage", {
+    id: "msg-sf2e-pack-link",
+    author: { id: sf2eEnv.game.user.id },
+    item: {
+        name: "Transfer Vitality",
+        slug: "transfer-vitality",
+        uuid: "Actor.caster.Item.action",
+        actor: sf2eCaster,
+    },
+    actor: sf2eCaster,
+    flags: {},
+});
+
+const sf2eHtml = String(sf2eEnv.state.messages.at(-1)?.content ?? "");
+check(
+    "an SF2e world links its own copy of the pack",
+    /@UUID\[Compendium\.sf2e-vitality-network\.harmonies-sf2e\.Item\.ShadowHarmony001\]/.test(sf2eHtml),
+    sf2eHtml.slice(0, 260),
+);
+
 // The same card has to cope with an item that cannot be created, which is what
 // happens for a player without permission to make world items.
 const fallbackEnv = makeEnvironment({ userId: "user-9", isGM: false });
@@ -1280,12 +1322,26 @@ check(
 const { existsSync: packExists, readFileSync: readPackFile } = await import("node:fs");
 check("the compendium pack is present", packExists("sf2e-vitality-network/packs/harmonies"), "packs/harmonies");
 const packManifest = JSON.parse(readPackFile("sf2e-vitality-network/module.json", "utf8"));
+const declaredPacks = packManifest.packs ?? [];
 check(
-    "the manifest declares the pack",
-    (packManifest.packs ?? []).some(
-        (entry) => entry.name === "harmonies" && entry.path === "packs/harmonies" && entry.type === "Item",
+    "the manifest declares a pack per system",
+    ["pf2e", "sf2e"].every((system) =>
+        declaredPacks.some((entry) => entry.system === system && entry.type === "Item"),
     ),
-    JSON.stringify(packManifest.packs ?? null),
+    JSON.stringify(declaredPacks),
+);
+// Foundry refuses a manifest whose Item packs do not declare a system, so this
+// is the check that guards a release being installable at all.
+check(
+    "every declared pack names its system",
+    declaredPacks.length > 0 &&
+        declaredPacks.every((entry) => typeof entry.system === "string" && entry.system.length > 0),
+    JSON.stringify(declaredPacks.map((entry) => `${entry.name}:${entry.system}`)),
+);
+check(
+    "every declared pack exists in the package",
+    declaredPacks.every((entry) => packExists(`sf2e-vitality-network/${entry.path}`)),
+    JSON.stringify(declaredPacks.map((entry) => entry.path)),
 );
 const packSources = ["AkashicHarmony01", "ElementalHarmony", "ShadowHarmony001", "HealingHarmony01", "RhythmHarmony001"];
 check(

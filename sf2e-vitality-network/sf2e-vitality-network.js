@@ -1052,8 +1052,12 @@
     /*  4. HARMONIES (one per mystic connection)                               */
     /* ---------------------------------------------------------------------- */
 
-    /** The compendium that ships with the module, and its item ids. */
-    const HARMONY_PACK = "harmonies";
+    /**
+     * The compendia that ship with the module, by the system they are declared
+     * for, and the item ids inside them. Foundry requires a pack to name the
+     * system it is compatible with, so each system gets its own copy.
+     */
+    const HARMONY_PACKS = { pf2e: "harmonies", sf2e: "harmonies-sf2e" };
     const HARMONY_PACK_IDS = {
         akashic: "AkashicHarmony01",
         elemental: "ElementalHarmony",
@@ -1072,6 +1076,24 @@
     ];
 
     const elementalTypesFor = (element) => ELEMENTAL_TRAITS.find((e) => e.element === element)?.types ?? [];
+
+    /**
+     * The harmony compendium for the running system, or null when there is none.
+     * Either pack is accepted, so an SF2e world still finds it if the manifest
+     * only carried the PF2e copy.
+     */
+    const harmonyPack = () => {
+        const names = [
+            HARMONY_PACKS[game.system?.id],
+            HARMONY_PACKS.pf2e,
+            HARMONY_PACKS.sf2e,
+        ].filter(Boolean);
+        for (const name of names) {
+            const pack = game.packs?.get?.(`${SCRIPT_ID}.${name}`);
+            if (pack) return { name, pack };
+        }
+        return null;
+    };
 
     const capitalise = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
 
@@ -1812,10 +1834,10 @@
         // The compendium item comes first: its UUID resolves on any client with the
         // module installed, which is what lets whoever has permission use the link.
         const packId = HARMONY_PACK_IDS[harmony.slug];
-        const pack = game.packs?.get?.(`${SCRIPT_ID}.${HARMONY_PACK}`);
-        if (packId && pack) {
-            const uuid = `Compendium.${SCRIPT_ID}.${HARMONY_PACK}.Item.${packId}`;
-            const entry = pack.index?.get?.(packId);
+        const found = harmonyPack();
+        if (packId && found) {
+            const uuid = `Compendium.${SCRIPT_ID}.${found.name}.Item.${packId}`;
+            const entry = found.pack.index?.get?.(packId);
             return { uuid, name: entry?.name ?? wanted };
         }
 

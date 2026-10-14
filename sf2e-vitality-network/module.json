@@ -56,7 +56,15 @@
             "name": "harmonies",
             "label": "Vitality Network Harmonies",
             "path": "packs/harmonies",
-            "type": "Item"
+            "type": "Item",
+            "system": "pf2e"
+        },
+        {
+            "name": "harmonies-sf2e",
+            "label": "Vitality Network Harmonies (SF2e)",
+            "path": "packs/harmonies-sf2e",
+            "type": "Item",
+            "system": "sf2e"
         }
     ]
 }
